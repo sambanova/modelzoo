@@ -1,0 +1,221 @@
+= Container Setup Guide
+
+This setup guide has instructions for: 
+
+* <<Virtualization Platform Setup>>
+* <<Podman Container Setup>>
+* <<Singularity Container Setup>>
+
+== Virtualization Platform Setup
+
+A virtualization platform to run a development container is one of the prerequisites for using Model Zoo.
+If you're starting with this doc, read through the top-level xref:../README.adoc[README] first for an overview.
+
+How you set up the Virtualization Platform depends on the OS you are using.
+
+=== Supported Platforms
+[cols="h,1,1", options="header"]
+|===
+|Operating System | Podman | Singularity
+|RHEL                   | ✅ | ❌
+|Ubuntu                 | ❌ | ✅
+|Other x86_64 Linux     | ❌ | ❌
+|===
+
+=== Install Podman on RHEL
+
+. Install the recommended virtualization platform https://podman.io/docs/installation[Podman] (cli-only).
+    ** On RHEL 8 and later, Podman is included in the default repositories.
+    ** Run `yum install -y podman` to install Podman.
+. Test that the installation succeeded: `podman --version`.
+
+=== Install Singularity on Ubuntu
+. Install the recommended virtualization platform https://docs.sylabs.io/guides/3.10/admin-guide/installation.html[Singularity].
+    ** See the official https://docs.sylabs.io/guides/3.10/admin-guide/installation.html#install-from-provided-rpm-deb-packages[Singularity install instructions].
+    ** The recommended version of Singularity is `3.10.5`.
+. Test that the installation succeeded: `singularity version`.
+
+=== Container Setup Overview
+
+Each virtualization platform requires different steps to run the development container, however, the overall process is the same. Running requires:
+
+. Gaining access to a container registry
+. Pulling (downloading) a container image
+. Running a container from the container image
+
+This document includes instructions for <<Podman Container Setup>> and <<Singularity Container Setup>>.
+
+== Podman Container Setup
+
+=== Gaining Access to a Container Registry
+
+SambaNova customers::
+   Contact Customer Support for access to the development container registry.
+
+////
+Internal developers::
+  Use the internal Artifactory container registry.
+////
+
+=== Pulling a Container Image
+
+The xref:VERSIONS.yaml[VERSIONS.yaml] contains the path to the image and information regarding compatible SambaFlow Runtime and Compiler versions.
+
+When you have access to the container registry, you can pull the container image. 
+
+[source,shell]
+----
+# Login to your docker registry url
+export DOCKER_REGISTRY=your_docker_registry_url
+podman login ${DOCKER_REGISTRY}
+
+# Read the container path for your OS from VERSIONS.yaml
+export CONTAINER=$(grep VERSIONS.yaml -e rhel | grep docker-repo | sed 's/.*: //')
+
+# Pull the container
+podman pull $(eval echo $CONTAINER)
+----
+To list pulled images, run `podman image ls`.
+
+TIP: If you run `podman pull` as a non-root user and run into permission errors, please ask your sysadmin to refer to the https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md[Podman rootless setup tutorial].
+
+=== Running a Container from the Image
+
+To start the container with Podman, run:
+
+[source,shell]
+----
+./start_container.sh [-b bind_mount_path...] <IMAGE>
+----
+This will run a podman container in detached mode with a name that includes the user and current date by default. To supply a name for the podman container instance, include the `-s <instance_name>` flag, for example:
+```bash
+./start_container.sh \
+    -b "/nvmedata/checkpoints:/opt/ckpts" \
+    -b "/nvmedata/datasets:/opt/datasets" \
+    -s "my_modelzoo" \
+    <IMAGE>
+```
+will create a running podman container with the name `my_modelzoo` for the current user. Run `podman ps` to verify that it is running.
+
+.Explanation of arguments
+[%collapsible]
+====
+* To see all flags, run `./start_container -h`.
+* The `<IMAGE>` can either be a
+    ** Podman image name with a tag (e.g. `IMAGE_NAME:TAG`); or
+    ** Podman image id (e.g. `183543226cab`)
+* The bind mount paths can be specified using `-b` (multiple times), for example:
++
+```bash
+./start_container.sh \
+    -b "/nvmedata/checkpoints:/opt/ckpts" \
+    -b "/nvmedata/datasets:/opt/datasets" \
+    <IMAGE>
+```
+    ** If you have previously downloaded checkpoints, datasets or compiled PEFs, reuse them by mounting the directories they're saved in.
+    ** Ensure that the host paths are accessible on the host and the container paths are absolute.
+====
+
+See <<Verifying Your Environment>> to ensure you have correctly set up your environment.
+
+== Singularity Container Setup
+
+This section contains instructions for running a development container using Singularity.
+If you're starting at this doc, please read through the top-level xref:../README.adoc[README] first. It is recommended to use https://github.com/sylabs/singularity/releases?q=3.10.5[SingularityCE 3.10.5].
+
+For instructions for Podman, see <<Podman Container Setup>> above.
+
+=== Gaining access to a container registry
+
+SambaNova Customers::
+    Contact Customer Support for access to the development container registry.
+
+////
+Internal developers::
+   Use the internal artifactory container registry.
+////
+
+=== Pulling a SIF
+
+Once you have access to a container registry, you can pull a container image as a SIF.
+
+[source,shell]
+----
+# Read the container path for your OS from VERSIONS.yaml
+export CONTAINER=$(grep VERSIONS.yaml -e ubuntu | grep docker-repo | sed 's/.*: //')
+
+# Pull the .sif
+export DOCKER_REGISTRY=your_docker_registry_url
+singularity pull --docker-login <LOCAL_SIF_NAME> docker://$(eval echo $CONTAINER)
+----
+where `<LOCAL_SIF_NAME>` is the name to give your local .sif. 
+
+You will be prompted to enter your registry credentials.
+
+NOTE: You need at least 15 GB for the image itself and for Singularity cache. You can use the `SINGULARITY_CACHEDIR` environment variable to specify a different directory for the cache. Check the Singularity documentation for details.
+
+We recommend that you store the SIF file that was created by Singularity in a location that is available to other users.
+
+=== Running a Container from the Image
+
+In Singularity, the container image to pull is specified inside a `.sif` file. As a test that you are able to run the SIF:
+[source,shell]
+----
+singularity run /path/to/.sif
+----
+
+To start the development container environment, run:
+[source,shell]
+----
+./start_container.sh [-b bind_mount_path...] <SIF>
+----
+This will start a singularity instance with a name that includes the user and current date by default. To supply a name for the singularity instance, include the `-s <instance_name>` flag, for example:
+```bash
+./start_container.sh \
+    -b "/nvmedata/checkpoints:/opt/ckpts" \
+    -b "/nvmedata/datasets:/opt/datasets" \
+    -s "my_modelzoo" \
+    <SIF>
+```
+will create a singularity instance with the name `my_modelzoo` for the current user:
+```bash
+$ singularity instance list
+INSTANCE NAME    PID        IP    IMAGE
+my_modelzoo      <PID>            <IMAGE>
+```
+If the instance already exists, the `start_container.sh` will reuse the existing singularity instance.
+
+.Explanation of arguments
+[%collapsible]
+====
+* To see all flags, run `./start_container -h`.
+* The `<SIF>` is the absolute path to a Singularity SIF.
+* The bind mount paths can be specified using `-b` (multiple times), for example:
++
+```bash
+./start_container.sh \
+    -b "/nvmedata/checkpoints:/opt/ckpts" \
+    -b "/nvmedata/datasets:/opt/datasets" \
+    <SIF>
+```
+    ** Ensure that the host paths are accessible on the host and the container paths are absolute.
+====
+
+== Verifying Your Environment
+To check that SambaFlow is accessible, run:
+
+```bash
+python -c 'import sambaflow; print(sambaflow.__version__)'
+```
+
+If you see a version number such as `1.21.1`, then congratulations! You're now in the development environment 🎉.
+
+* The current directory is mounted under `/opt/modelzoo`
+* SambaFlow is installed under `/opt/sambaflow`
+
+If you mounted a path using the `-b` option with `start_container.sh`, verify that it is accessible.
+For example, if you mounted `/nvmedata/checkpoints` from the host to `/opt/ckpts` in the container using
+```bash
+./start_container.sh -b "/nvmedata/checkpoints:/opt/ckpts" ...
+```
+Then `ls /opt/ckpts/` inside your container should show a list of your checkpoints.

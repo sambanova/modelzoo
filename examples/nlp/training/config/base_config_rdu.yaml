@@ -1,0 +1,94 @@
+# Copyright 2024 SambaNova Systems, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+model:
+    # Toggle to control the normalization layer precision. True means fp32 and false means bf16. 
+    fp32_ln: False
+    # When this flag is True, logits are returned in fp32 precision. 
+    # When this flag is False, logits are returned  bf16 precision. 
+    fp32_logits: True
+    # In LLMs, when there are multiple hidden layers, each layer hidden state is accumulated together. 
+    # This flag controls whether the accumulation occurs in fp32 or bf16.
+    fp32_skip_add: True
+    # When this flag is False, the attention layer is performed in bf16. 
+    # When this flag is True, the attention layer uses both fp32 and bf16 precision. 
+    # See https://docs.sambanova.ai/developer/latest/mixed-precision.html
+    mixedp_attn: True
+    # The max number of tokens that the RDU graph can generate minus the input length.
+    # The sequence length includes the input prompts and the generated tokens. 
+    # At runtime, the length of input prompts must be smaller than max sequence length.
+    max_seq_length: null
+
+checkpoint:
+    # Path to the downloaded Hugging Face cache, including checkpoints, model config and tokenizer.
+    model_name_or_path: null
+    config_name: null
+
+training:
+    dataset: null
+    batch_size: null
+    num_epochs: 1
+    learning_rate: 1e-5
+    output_dir: 'finetuned_model'
+    seed: 42
+
+# A string of either compile or run.
+command: null
+
+# Compiler configs for PEF optimization and generation.
+# NOTE: only need to change arch/output_folder and keep the others as default.
+samba_compile:
+    # Required! Target RDU architecture to compile to: sn20, sn30, sn40. 
+    arch: null
+    # Output folder for the PEF and other artifacts. If null, defaults to the current working directory. 
+    output_folder: null
+    # Specify `nlp` to optimize models that are based on a transformers architecture. 
+    # No other options are currently supported.
+    compiler_mode: nlp
+    # Optimization level, o1 fuses adjacent operators for better performance.
+    # The default O3 uses the full graph optimization scope and compiles more slowly.
+    # See https://docs.sambanova.ai/developer/latest/compiler-o1.html for background information. 
+    optim_level: o1
+    # The SambaFlow compiler performs blfoat16 computation by default. 
+    # This flag forces operators to be in float32/bfloat16 mixed precision.
+    # See https://docs.sambanova.ai/developer/latest/compiler-o1.html for background information. 
+    enable_mixed_precision_ops:
+        - gemm
+        - softmax
+    # Legacy option. Do not change. 
+    enable_multi_input_broadcast: True
+    # A legacy flag for O1 optimization.
+    o1_experimental_opts: True
+    # Accumulation mode for tiling, bf16sr means bf16 inputs with stochastic rounding.
+    tiling_accum: bf16sr
+    # A legacy flag for CrossEntropyLoss.
+    use_air_ce: True
+    # An optional path to an operator fusion rules file that specifies the o1 pattern fusion 
+    # and heuristis in predefined yaml file format. 
+    # See https://docs.sambanova.ai/developer/latest/opfusion-rule-syntax.html
+    optimization_rules: null
+    use_o1_default_rules: True
+    enable_distribution_pass: True
+    weight_grad_reduce: bf16sr
+    # Number of tiles to be used on chip. If you don't set num_tiles=4 on an SN30 system,
+    # the compiler uses tensor parallel mode, which is not currently supported with Model Zoo. 
+    num_tiles: 4
+    # Enable HBM allocation for sn40
+    all_regions_hbm: True
+    enable_safe_stochastic_rounding: True
+
+# Run configs 
+samba_run:
+    # The path to the compiled PEF file.
+    pef: null

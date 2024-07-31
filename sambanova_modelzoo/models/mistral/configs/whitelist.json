@@ -1,0 +1,1345 @@
+[
+  {
+    "sn_config": {
+      "mixedp_attn": true,
+      "fp32_logits": true,
+      "fp32_ln": false,
+      "fp32_skip_add": true,
+      "use_segmented_softmax_attn": false,
+      "vocab_size": 32000,
+      "max_position_embeddings": 32768,
+      "hidden_size": 4096,
+      "intermediate_size": 14336,
+      "num_hidden_layers": 32,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "hidden_act": "silu",
+      "architectures": ["SNMistralForCausalLM"],
+      "model_type": "snmistral"
+    },
+    "job_configs": {
+      "RDUGenerationAppConfig": [
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 1
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 2
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 8
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 1
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 2
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 8
+          }
+        }
+      ],
+      "RDUTrainingConfig": [
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 8
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 8
+          }
+        }
+      ]
+    }
+  },
+  {
+    "sn_config": {
+      "mixedp_attn": true,
+      "fp32_logits": true,
+      "fp32_ln": false,
+      "fp32_skip_add": true,
+      "use_segmented_softmax_attn": false,
+      "vocab_size": 32000,
+      "max_position_embeddings": 4096,
+      "hidden_size": 4096,
+      "intermediate_size": 14336,
+      "num_hidden_layers": 32,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "hidden_act": "silu",
+      "architectures": ["SNMistralForCausalLM"],
+      "model_type": "snmistral"
+    },
+    "job_configs": {
+      "RDUGenerationAppConfig": [
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 1
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 2
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 8
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 1
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 2
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "generation": {
+            "batch_size": 8
+          }
+        }
+      ],
+      "RDUTrainingConfig": [
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 8
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 4096
+          },
+          "training": {
+            "batch_size": 8
+          }
+        }
+      ]
+    }
+  },
+  {
+    "sn_config": {
+      "mixedp_attn": true,
+      "fp32_logits": true,
+      "fp32_ln": false,
+      "fp32_skip_add": true,
+      "use_segmented_softmax_attn": true,
+      "vocab_size": 32000,
+      "max_position_embeddings": 8192,
+      "hidden_size": 4096,
+      "intermediate_size": 14336,
+      "num_hidden_layers": 32,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "hidden_act": "silu",
+      "architectures": ["SNMistralForCausalLM"],
+      "model_type": "snmistral"
+    },
+    "job_configs": {
+      "RDUGenerationAppConfig": [
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 1
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 2
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 8
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 16
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 1
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 2
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": true,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "generation": {
+            "batch_size": 8
+          }
+        }
+      ]
+    }
+  },
+  {
+    "sn_config": {
+      "mixedp_attn": true,
+      "fp32_logits": true,
+      "fp32_ln": false,
+      "fp32_skip_add": true,
+      "use_segmented_softmax_attn": false,
+      "vocab_size": 32000,
+      "max_position_embeddings": 8192,
+      "hidden_size": 4096,
+      "intermediate_size": 14336,
+      "num_hidden_layers": 32,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "hidden_act": "silu",
+      "architectures": ["SNMistralForCausalLM"],
+      "model_type": "snmistral"
+    },
+    "job_configs": {
+      "RDUTrainingConfig": [
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn30"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "training": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "training": {
+            "batch_size": 4
+          }
+        },
+        {
+          "samba_compile": {
+            "all_regions_hbm": true,
+            "inference": false,
+            "use_air_ce": true,
+            "optim_level": "o1",
+            "n_chips": 1,
+            "o1_experimental_opts": true,
+            "compiler_mode": "nlp",
+            "num_tiles": 4,
+            "tensor_parallel": "none",
+            "run_early_tp": false,
+            "use_o1_default_rules": true,
+            "enable_mixed_precision_ops": ["gemm", "softmax"],
+            "enable_multi_input_broadcast": true,
+            "tiling_accum": "bf16sr",
+            "arch": "sn40"
+          },
+          "model": {
+            "fp32_ln": false,
+            "fp32_logits": true,
+            "fp32_skip_add": true,
+            "mixedp_attn": true,
+            "max_seq_length": 8192
+          },
+          "training": {
+            "batch_size": 8
+          }
+        }
+      ]
+    }
+  }
+]

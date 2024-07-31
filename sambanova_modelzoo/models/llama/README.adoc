@@ -1,0 +1,43 @@
+= Llama-2 Model Card
+
+Llama 2, developed by Meta, is "a collection of pretrained and fine-tuned generative text models ranging in scale from 7 billion to 70 billion parameters." This folder contains source code that adapts the model for running on RDU. 
+
+== Architecture Changes 
+
+Model Zoo models maintain checkpoint compatibility with Hugging Face, so there are no architecture differences. 
+
+* See  xref:patch_llama.py[] for details on how we've modified the model to run on RDU
+* See xref:../../examples/training/README.adoc[the training README] and the  xref:../../examples/text_generation/README.adoc[text generation README] for discussions of CPU/RDU differences. 
+
+== General Use Cases
+
+See the link:https://huggingface.co/meta-llama/Llama-2-7b-chat-hf[Hugging Face Model Card]. SambaNova does not ship checkpoints for this model. Instead, you can use the Model Zoo model source with the corresponding Hugging Face checkpoint. 
+
+== Data Preparation
+
+Our models expect data in HDF5 format. See the SambaNova data preparation scripts in link:https://github.com/sambanova/generative_data_prep[this public GitHub repo]. 
+
+== Model Parameters and Configuration
+
+See link:https://docs-staging.sambanova.ai/developer/latest/modelzoo-best-practices.htm[Model Zoo Best Practices] for a discussion of modification options and limitations.  
+
+== Supported Models
+Model Zoo currently supports the following Llama-2 versions: 
+
+* Llama-2-7b
+* Llama-2-13b
+* Llama-2-70b
+* Llama-3-8b
+
+IMPORTANT: For Llama 70B, base configuration models you must use Tensor Parallel (link) to ensure the model fits on the RDU. Use these settings in the samba_compile section of the config YAML file:
+
+    samba_compile:
+    tensor_parallel: weight
+    n_chips: 2
+    num_tiles: 8
+    early_tp: true
+
+link:https://docs-staging.sambanova.ai/developer/latest/modelzoo-best-practices.htm[Model Zoo Best Practices] lists the checkpoints that we have tested, but you can use other Hugging Face checkpoints for the corresponding model. 
+
+
+

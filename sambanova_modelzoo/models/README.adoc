@@ -1,0 +1,23 @@
+= SambaNova Model Zoo Models
+
+Model Zoo models are popular open source models that have been customized to run on SambaNova hardware. 
+
+* This folder has the model source code and supporting files. 
+* The `examples/nlp` folder has example scripts for running training and inference with these models. 
+
+== Files and Folders
+
+Each model includes the following files: 
+
+* `modeling_xyz.py`. Defines the model. A copy of the original model from Hugging Face transformers, with SambaNova-specific performance changes.
+* `configuration_xyz.py`. Defines the SambaNova-specific config that inherits from the Hugging Face xyz config and `SNPretrainedConfig`.
+* `patch_xyz.py`. Patch code for the model (optional).
+* `requirements_xyz.py`. Script that checks dynamic requirements for the model, such as the transformers version, in the `is_accepted` function.
+* `plugins_xyz.py`. Defines a `ConfigurationTransformerPlugin` for xyz that is registered when loaded.
+* `\__register__.py`. Imports for all the plugins and classes for a model.
+* README.adoc. Short summary of the model. Because the changes to each model are quite small, the Hugging Face model corresponging to the SambaNova novel has the details. 
+
+In addition, each model includes the following folders that are primarily used internally: 
+
+* `configs` folder includes a whitelist.json that specifies the parameter combinations that we have tested with. 
+* `heurists` folder includes files that are used by the compiler. DO NOT change the files in the `heuristics` folder

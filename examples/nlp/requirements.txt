@@ -1,0 +1,2 @@
+transformers==4.39.3
+# need to include torch etc

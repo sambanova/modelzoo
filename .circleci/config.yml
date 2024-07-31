@@ -1,0 +1,257 @@
+# Copyright 2024 SambaNova Systems, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: 2.1
+
+orbs:
+  slack: circleci/slack@4.13.3
+  codecov: codecov/codecov@3.3.0
+
+executors:
+  rhel-devbox:
+    docker:
+      - image: ${DOCKER_REGISTRY}/modelzoo/rhel8.5/devbox:0.1.0
+        auth:
+          username: ${GCLOUD_SERVICE_USER}
+          password: ${GCLOUD_SERVICE_KEY}
+    resource_class: xlarge
+  ubuntu-devbox:
+    docker:
+      - image: ${DOCKER_REGISTRY}/modelzoo/ubuntu20/devbox:0.1.0
+        auth:
+          username: ${GCLOUD_SERVICE_USER}
+          password: ${GCLOUD_SERVICE_KEY}
+    resource_class: xlarge
+  python-3_7:
+    docker:
+      - image: cimg/python:3.7
+    resource_class: medium
+  python-3_8:
+    docker:
+      - image: cimg/python:3.8
+    resource_class: medium
+  python-3_9:
+    docker:
+      - image: cimg/python:3.9
+    resource_class: medium
+  example:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+  pre-commit-docker:
+    docker:
+      - image: python:3.8
+    resource_class: medium
+  base:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+
+commands:
+  setup-ssh:
+    steps:
+      - run:
+          name: Add github.com SSH key to known-hosts
+          command: mkdir -p ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
+  source-versions:
+    steps:
+      - run:
+          name: Source Versions
+          command: |
+            YAML_FILE=".circleci/VERSIONS.yaml"
+            CI_PIPENV_VERSION=$(awk '/pipenv:/ {print $2}' "$YAML_FILE")
+            CI_DOCKER_IMAGE=$(awk '/image:/ {print $2}' "$YAML_FILE")
+            echo "export CI_PIPENV_VERSION=$CI_PIPENV_VERSION" >> "$BASH_ENV"
+            echo "export CI_DOCKER_IMAGE=$CI_DOCKER_IMAGE" >> "$BASH_ENV"
+            echo "source ~/.bashrc" >> "$BASH_ENV"
+  python-test:
+    steps:
+      - run:
+          name: Generate Cache Key
+          command: |
+            echo `date +%Y-%V` > ~/circleci_cache_key
+            echo `python -V` >> ~/circleci_cache_key
+      - restore_cache:
+          key: v1-{{ arch }}-{{ checksum "pyproject.toml" }}-{{ checksum "~/circleci_cache_key" }}
+      - run:
+          name: Instantiate Python Virtual Environment
+          command: |
+            pip install -r requirements/requirements.txt
+            pip install -e .
+      - save_cache:
+          key: v1-{{ arch }}-{{ checksum "pyproject.toml" }}-{{ checksum "~/circleci_cache_key" }}
+          paths:
+            - ~/.cache/pip
+      - run:
+          name: Run Pytest
+          command: pytest
+      - codecov/upload
+      - store_test_results:
+          path: test_reports/circleci
+      - store_artifacts:
+          path: test_reports
+  python-build-publish:
+    steps:
+      - run:
+          name: Generate Cache Key
+          command: |
+            echo `date +%Y-%V` > ~/circleci_cache_key
+            echo `python -V` >> ~/circleci_cache_key
+      - restore_cache:
+          key: v1-{{ arch }}-{{ checksum "pyproject.toml" }}-{{ checksum "~/circleci_cache_key" }}
+      - run:
+          name: Instantiate Python Virtual Environment
+          command: |
+            pip install -U pip
+            pip install hatch hatch-vcs
+      - save_cache:
+          key: v1-{{ arch }}-{{ checksum "pyproject.toml" }}-{{ checksum "~/circleci_cache_key" }}
+          paths:
+            - ~/.cache/pip
+      - run:
+          name: Build Python Package
+          command: hatch build
+      - when:
+          condition:
+            or:
+              - equal: [ << pipeline.git.branch >>, main ]
+              - << pipeline.git.tag >>
+          steps:
+            - run:
+                name: Publish Python Package
+                command: |
+                  current_package_version=$(hatch version)
+                  current_package_name=$(hatch project metadata name)
+                  pip_index_output=$(pip index versions --pre ${current_package_name})
+                  available_versions=$(echo "${pip_index_output}" | grep "Available versions:" | sed 's/Available versions: //')
+                  if echo "${available_versions}" | grep -wq "${current_package_version}"; then
+                    echo "Skipping Publish. Python package ${current_package_name}=${current_package_version} already exists in the index."
+                  else
+                    pipenv run hatch publish -r ${HATCH_INDEX_REPO} -u ${GCLOUD_SERVICE_USER} -a ${GCLOUD_SERVICE_KEY}
+                  fi
+
+# Define the jobs we want to run for this project
+jobs:
+  pre-commit:
+    executor: pre-commit-docker
+    steps:
+      - checkout
+      - setup-ssh
+      - source-versions
+      - run:
+          name: Generate Cache Key
+          command: |
+            echo date +%Y-%V > circleci_cache_key
+            echo python -V >> circleci_cache_key
+      - restore_cache:
+          key: v1-{{ arch }}-{{ checksum "pyproject.toml" }}-{{ checksum "circleci_cache_key" }}
+      - run:
+          name: Run Pre-commit
+          # TODO: Enable "pipenv check" once we have a removed vulnerable transformers version
+          command: |
+            pip install -U pip
+            pip install pre-commit
+            pre-commit run --all-files
+      - save_cache:
+          key: v1-{{ arch }}-{{ checksum "pyproject.toml" }}-{{ checksum "circleci_cache_key" }}
+          paths:
+            - ~/.cache/pip
+            - ~/.cache/pre-commit
+      - store_artifacts:
+          path: docs/build/html
+  test:
+    parameters:
+      docker-image:
+        type: executor
+    executor: << parameters.docker-image >>
+    working_directory: /root/project
+    steps:
+      - checkout
+      - setup-ssh
+      - source-versions
+      - python-test
+  build-publish:
+    executor: python-3_8
+    steps:
+      - checkout
+      - setup-ssh
+      - source-versions
+      - python-build-publish
+  notify:
+    executor:
+      name: base
+    steps:
+      - checkout
+      - run:
+          name: Read Slack json-payload into env-var
+          command: |
+            echo "export SLACK_PAYLOAD=$(jq '.' .circleci/assets/schemas/slack_notification_format.json)" >> $BASH_ENV
+      - when:
+          condition: << pipeline.git.tag >>
+          steps:
+            - slack/notify:
+                event: pass
+                template: success_tagged_deploy_1
+            - slack/notify:
+                event: fail
+                mentions: '@sw_regressions_owners'
+                template: basic_fail_1
+      - unless:
+          condition: << pipeline.git.tag >>
+          steps:
+              - slack/notify:
+                  event: pass
+                  template: basic_success_1
+
+# Define the workflows we want to run for this project
+workflows:
+  # Build, test, and publish all packages for each PR and each tag
+  test-build-publish:
+    jobs:
+      - pre-commit:
+          context: idc-btd-development
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+.*$/
+      - build-publish:
+          requires:
+            - pre-commit
+          context: idc-btd-development
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+.*$/
+      - notify:
+          requires:
+            - pre-commit
+            - build-publish
+          context: slack
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+.*$/
+  # Build, test, and publish all packages on a weekly basis
+  weekly-test-build-publish:
+    when:
+      equal: [<<pipeline.trigger_source>>, "scheduled_pipeline"]
+    jobs:
+      - pre-commit:
+          context: idc-btd-development
+      - test:
+          context: idc-btd-development
+          matrix:
+            parameters:
+              docker-image: [rhel-devbox, ubuntu-devbox]
+      - build-publish:
+          context: idc-btd-development
+      - notify:
+          context: slack

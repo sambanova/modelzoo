@@ -1,0 +1,343 @@
+# Copyright 2024 SambaNova Systems, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+base_gemm:
+  priority: 0
+  heuristic: 
+    name: SAFE_GEMM
+    tp_dim: Auto
+  pattern:
+    linear:
+      op_type: linear
+
+llama2_qkv:
+    priority: 5
+    heuristic: 
+        name: SAFE_GEMM
+        tp_dim: Auto
+    pattern:
+        ln_pow_9:
+            op_type: pow
+            child: ln_mean_10
+        ln_mean_10:
+            op_type: mean
+            child: ln_add_11
+        ln_add_11:
+            op_type: add
+            child: ln_rsqrt_12
+        ln_rsqrt_12:
+            op_type: rsqrt
+            child: ln_mul_13
+        ln_mul_13:
+            op_type: mul
+            child: ln_mul_15
+        ln_mul_15:
+            op_type: mul
+            children:
+              - linear_q_16
+              - linear_k_17
+              - linear_v_18
+        linear_q_16:
+            op_type: linear
+        linear_k_17:
+            op_type: linear
+        linear_v_18:
+            op_type: linear
+
+llama2_rotary_embedding:
+    priority: 1
+    pattern:
+        qkv_ln_mul_15:
+            op_type: mul
+            included: false
+            children:
+              - qkv_linear_q_16
+              - qkv_linear_k_17
+              - qkv_linear_v_18
+        qkv_linear_q_16:
+            included: false
+            op_type: linear
+            child: m_view_19
+        qkv_linear_k_17:
+            included: false
+            op_type: linear
+            child: l_view_21
+        qkv_linear_v_18:
+            included: false
+            op_type: linear
+            child: r_view_23
+        l_view_21:
+            op_type: view
+            child: l_g_or_s_parent
+        l_g_or_s_parent:
+            match_first_option:
+              - l_transpose_22
+              - l_transpose_to_split
+        l_transpose_to_split:
+            op_type: transpose
+            children:
+              - l_mul_32
+              - l_split
+        l_split:
+            op_type: split
+            children:
+              - l_neg_35
+              - l_cat_36
+        l_transpose_22:
+            op_type: transpose
+            children:
+              - l_mul_32
+              - l_getitem_33
+              - l_getitem_34
+        l_mul_32:
+            op_type: mul
+            child: l_add_38
+        l_getitem_33:
+            op_type: getitem
+            child: l_cat_36
+        l_getitem_34:
+            op_type: getitem
+            child: l_neg_35
+        l_neg_35:
+            op_type: neg
+            child: l_cat_36
+        l_cat_36:
+            op_type: cat
+            child: l_mul_37
+        l_mul_37:
+            op_type: mul
+            child: l_add_38
+        l_add_38:
+            op_type: add
+        m_view_19:
+            op_type: view
+            child: m_g_or_s_parent
+        m_g_or_s_parent:
+            match_first_option:
+              - m_transpose_20
+              - m_transpose_to_split
+        m_transpose_to_split:
+            op_type: transpose
+            children:
+              - m_mul_25
+              - m_split
+        m_split:
+            op_type: split
+            children:
+              - m_neg_28
+              - m_cat_29
+        m_transpose_20:
+            op_type: transpose
+            children:
+              - m_mul_25
+              - m_getitem_26
+              - m_getitem_27
+        m_mul_25:
+            op_type: mul
+            child: m_add_31
+        m_getitem_26:
+            op_type: getitem
+            child: m_cat_29
+        m_getitem_27:
+            op_type: getitem
+            child: m_neg_28
+        m_neg_28:
+            op_type: neg
+            child: m_cat_29
+        m_cat_29:
+            op_type: cat
+            child: m_mul_30
+        m_mul_30:
+            op_type: mul
+            child: m_add_31
+        m_add_31:
+            op_type: add
+        r_view_23:
+            op_type: view
+            child: r_transpose_24
+        r_transpose_24:
+            op_type: transpose
+
+llama2_self_attn_proj:
+    priority: 4
+    heuristic: 
+        name: SAFE_GEMM
+        tp_dim: Auto
+    pattern:
+        linear_48:
+            op_type: linear
+            child: add_49
+        add_49:
+            op_type: add
+            children:
+              - rms_pow_50
+              - rms_mul_54
+        rms_pow_50:
+            op_type: pow
+            child: rms_mean_51
+        rms_mean_51:
+            op_type: mean
+            child: rms_add_52
+        rms_add_52:
+            op_type: add
+            child: rms_rsqrt_53
+        rms_rsqrt_53:
+            op_type: rsqrt
+            child: rms_mul_54
+        rms_mul_54:
+            op_type: mul
+            child: rms_mul_56
+        rms_mul_56:
+            op_type: mul
+
+llama2_ffn:
+    priority: 7
+    heuristic: 
+        name: SAFE_GEMM
+        tp_dim: Auto
+    pattern:
+        linear_57:
+            op_type: linear
+            child: silu_58
+        silu_58:
+            op_type:
+              - silu
+              - gelu
+            child: mul_60
+        linear_59:
+            op_type: linear
+            child: mul_60
+        mul_60:
+            op_type: mul
+            child: linear_61
+        linear_61:
+            op_type: linear
+            child: add_62
+        add_62:
+            op_type: add
+
+sdpa_3d_attn_mask:
+  heuristic: SDPA
+  priority: 100
+  pattern:
+    collect_0:
+      op_type: zipmapreduce
+      child: collect_1
+    collect_1:
+      op_type: zipmapreduce
+      child: scaled_dot_product_attention_0
+    scaled_dot_product_attention_0:
+      op_type: scaled_dot_product_attention
+      
+sdpa:
+  heuristic: SDPA
+  priority: 99
+  pattern:
+    scaled_dot_product_attention_0:
+      op_type: scaled_dot_product_attention
+
+llama2_self_attn:
+    priority: 3
+    heuristic: MHA
+    pattern:
+        query_cast:
+            op_type: to
+            required: false
+            child: matmul_40
+        transpose_39:
+            op_type: transpose
+            child: matmul_40
+        matmul_40:
+            op_type: matmul
+            child: div_41
+        div_41:
+            op_type: div
+            child: add_or_fill
+        add_or_fill:
+            op_type:
+              - masked_fill
+              - triufill
+              - add
+            required: false
+            child: mask_add
+        mask_add:
+            op_type: add
+            required: false
+            child: softmax_43
+        softmax_43:
+            op_type: softmax
+            child: matmul_45
+        value_cast:
+            op_type: to
+            required: false
+            child: matmul_45
+        matmul_45:
+            op_type: matmul
+            child: transpose_46
+        transpose_46:
+            op_type: transpose
+            child: reshape_47
+        reshape_47:
+            op_type: reshape
+
+llama2_self_attn_with_3d_attention:
+    priority: 6
+    heuristic: 
+        name: MHA
+    pattern:
+        attention3d:
+            op_type: zipmapreduce
+            child: sub_01
+        sub_01:
+            op_type: rsub
+            child: mul_02
+        mul_02:
+            op_type: mul
+            child: add_42
+        query_cast:
+            op_type: to
+            required: false
+            child: matmul_40
+        transpose_39:
+            op_type: transpose
+            child: matmul_40
+        matmul_40:
+            op_type: matmul
+            child: div_41
+        div_41:
+            op_type: div
+            child: masked_fill_60
+        masked_fill_60:
+            op_type:
+              - masked_fill
+              - triufill
+            child: add_42
+        add_42:
+            op_type: add
+            child: softmax_43
+        softmax_43:
+            op_type: softmax
+            child: matmul_45
+        value_cast:
+            op_type: to
+            required: false
+            child: matmul_45 
+        matmul_45:
+            op_type: matmul
+            child: transpose_46
+        transpose_46:
+            op_type: transpose
+            child: reshape_47
+        reshape_47:
+            op_type: reshape

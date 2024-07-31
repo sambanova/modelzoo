@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=67", "wheel>=0.40", "hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sambanova-modelzoo"
+requires-python = ">=3.8"
+description = "Set of model implementations adapted to run efficiently on RDU"
+dynamic = ["version"]
+
+[tool.hatch]
+build.include = [
+    "sambanova_modelzoo/**",
+    "requirements/**",
+    "pyproject.toml",
+    "setup.cfg",
+    "README.*"
+]
+build.exclude = [
+    ".github/**",
+    "tests/**",
+    "docs/**",
+    ".gitignore",
+    ".pre-commit-config.yaml"
+]
+version = { source = "vcs", style = "pep440-git" }
+
+# Configure Pytest for testing Python code
+[tool.pytest.ini_options]
+pythonpath = [
+    "."
+]
+# NOTE: --forked is essential to create independent samba session for each subtest, otherwise tracing same graph
+# more than once will cause failure due to uncleared global session state.
+# NOTE: 16 processes are chosen empirically as the improvements saturates, be aware to retest in future
+# NOTE: 30 seconds per-test timeout for local run that uses toml config, regression has 120s (4x) to make room for stability
+# NOTE: --timeout-method thread correctly report failures. The default signal method error out in multiprocess but does
+#       not report failures so the tests still pass even with timeout error. Tested under RedHat docker and Gate.
+minversion = "7.0"
+markers = [
+    "fast",
+    "slow",
+    "unit"
+]
+addopts = """
+    -ra -q -vv
+    -n8 --forked
+    --durations=50
+    --html=test_reports/report.html
+    --junitxml=test_reports/circleci/pytest/junit.xml
+    --cov=sambanova_modelzoo
+    --cov-branch
+    --cov-report term
+    --cov-report html:test_reports/coverage/pytest_cov.html
+    --cov-report xml:test_reports/coverage/pytest_cov.xml
+"""
+testpaths = [
+    "tests",
+]
+# TODO: Remove all ignored warnings
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+    "ignore::FutureWarning",
+]
+junit_suite_name = "Pytest"
+junit_duration_report = "call"
+
+[tool.isort]
+profile = "black"
+known_first_party = ["sambanova-*", "sambanova_*"]
+known_third_party = []
+
+[tool.bandit]
+exclude_dirs = [
+    "tests",
+]
+
+[tool.black]
+line-length = 120

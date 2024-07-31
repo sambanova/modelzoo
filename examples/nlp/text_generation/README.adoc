@@ -1,0 +1,91 @@
+= About the Generation Scripts
+
+The generation scripts illustrate how you can run generation with a model that's been customized for RDU on a SambaNova system. These scripts are meant to show how things work and are not intended for use in production.
+
+* `cpu_generate_text.py` — Simple generation script on CPU to allow you to compare CPU and RDU. Tested only on Llama-2 7B.
+
+* `rdu_generate_text.py` — Script for running generation on RDU with a large language model. This script expects customized model code, like the model code in the `/models` folder.
+
+For a full walkthrough, including environment setup and how to download a checkpoint see the xref:../../../examples/nlp/README.adoc[/examples README]. This file only has a Quick Run section and a discussion of the differences between running on CPU and running on RDU.
+
+== Quick Run
+
+=== Before You Begin
+
+[IMPORTANT]
+====
+. Start by setting up a container environment and downloading a Devbox container, as instructed by SambaNova Customer Support. See the xref:../../../README.adoc[top-level README].
+. Download a model checkpoint from Hugging Face. See the xref:../../../examples/nlp/README.adoc[Walkthrough in the examples README].
+. In your development environment, mount all checkpoints from the host before you run the quick run commands.
+====
+
+=== Compile the example model and generate a PEF
+
+
+[source,bash]
+----
+cd /opt/modelzoo/examples/nlp/text_generation/
+
+python rdu_generate_text.py \
+  command=compile \
+  checkpoint.model_name_or_path=PATH_TO_DOWNLOADED_MODEL \
+  samba_compile.output_folder=PATH_TO_OUTPUT \
+  +samba_compile.arch=sn30 \
+  +samba_compile.target_sambaflow_version=MAJOR.MINOR.PATCH
+----
+
+The compiler writes a PEF file (.pef) to the specified output directory.
+
+=== Run generation with the PEF
+
+To run generation with the default prompt in the config.yaml (`Once upon a time`):
+[source,bash]
+----
+python rdu_generate_text.py \
+  command=run \
+  checkpoint.model_name_or_path=PATH_TO_DOWNLOADED_MODEL \
+  samba_run.pef=PATH_TO_PEF
+----
+
+To run generation with a prompt that's different from the default, use this template:
+
+[source,bash]
+----
+python rdu_generate_text.py \
+command=run \
+checkpoint.model_name_or_path=PATH_TO_DOWNLOADED_MODEL \
+samba_run.pef=PATH_TO_PEF generation.prompts=['YOUR_PROMPT_HERE']
+----
+
+== Comparing RDU and CPU scripts
+
+A separate script `run_generation_torch.py` demonstrates how to run a Model Zoo model on CPU. This script is mainly intended to allow you to compare the code for RDU and for CPU and to better understand the SambaFlow software stack.
+
+NOTE: Because the CPU script is intended as an example, we've tested it only with Llama 2 7B.
+
+
+=== Commonalities between RDU and CPU script
+
+* Model Zooo models conform to the original Hugging Face checkpoint compatibility.
+* To load open an source checkpoint into a Model Zoo model, follow these steps:
+    ** `AutoConfig.from_pretrained` to load the original model config.
+    ** `ConfigurationTransformer` to transform the config into Model Zoo model config.
+    ** Use either `AutoModelForCausalLM.from_pretrained` or `AutoModelForCausalLM.from_config` to construct the Model Zoo model with transformed config and optionally load the pretrained weights/checkpoints.
+* Hugging Face's `model.generate` API is used for the text generation with KV cache.
+* All Model Zoo models are modified to use right padded input_ids instead of the original left padding. `sn_model.init_inputs_processor` overwrites the `prepare_inputs_for_generation` function inside each modeling code to enable Model Zoo specific input preparations. See `modelzoo/lib/clm_runtime.py` for more details.
+
+
+=== Key differences between RDU and CPU script
+
+
+* RDU frontend API has a separated compilation phase to generate a PEF to be used at runtime. The reason is that currently we do not provide a precompiled kernel library, but compile / compose the kernel graph on-the-fly during the compilation for RDU. * `CachedInferenceCompiler::compile` is provided for the convinience of compiling text generation models on RDU.
+* RDU does not support shared weight tensors in a model, so `tie_word_embeddings` needs to be set to `False``. This means RDU will have separate tensors for input word embedding weights and output word embedding weights (also known as `lm_head`).
+* At runtime, the RDU requires graph tracing to prepare for model weight tensors. `CachedInferenceCompiler::trace` is provided as convenience function for doing that. Note that `CachedInfereceCompiler::compile` calls the same `trace` function internally at compile time. It is critical that the tracing at runtime is identical to the tracing at compile for the same model.
+* At runtime, the RDU uses `samba.session.init_multigraph_runtime` to construct the runtime context to run RDU and does the actual Host to RDU weight transformation.
+* At runtime, the RDU uses the `samba.session.run` API to start RDU execution. The `generate_forward` context manager provides a convinence function on using `samba.session.run` instead of direct `model()` forward call. See `model_session.py` in the `text_generation` directory for details.
+
+== See Also
+
+* See xref:../README.adoc[the /examples README] for a detailed walkthrough. 
+* See the README files for each model in `sambanova_modelzoo/nlp` for some details about each supported model. 
+* See link:https://docs-staging.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo best practices] for a discussion of making changes to a model, a list of tested checkpoints, and more. 

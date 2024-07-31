@@ -1,0 +1,217 @@
+
+= About the Training Scripts
+
+The training scripts illustrate how you can run a model that's been customized for RDU on a SambaNova system. These examples are meant to illustrate the loading and training mechanisms and are not intended for use in production.
+
+* `cpu_train_llm.py` -- Simple training script on CPU. Serves as a comparison for RDU.
+* `rdu_train_llm.py` -- Script for running a large language models on RDU.
+* `rdu_train_llm_dp.py` -- Script for running a large language models on RDU in data parallel mode.
+
+All scripts:
+
+* Load a model, dataset, and run training.
+* Expect to run Model Zoo models; based on the modeling code in the `/models` folder.
+* Save checkpoints and a summary.
+* Have some <<Limitations, limitations>>.
+
+[TIP]
+====
+The scripts are very similar. View a `diff` of the files or compare them in your code editor!
+====
+
+== Quick Run
+
+IMPORTANT: This README only has a Quick Run section and a discussion of the differences between running on CPU and running on RDU. For complete step-by-step instructions, including environment setup and how to download a checkpoint see the xref:../../../examples/nlp/README.adoc[/examples README].
+
+=== Before You Begin
+
+Before you begin, you must set up a supported container, download a model checkpoint, and mount all relevant artifacts, as follows:
+
+. Start by setting up a container environment and downloading a Devbox container, as instructed by SambaNova Customer Support. See the xref:../../../docs/container-setup.adoc[Container Setup Guide].
+. Download a model checkpoint from Hugging Face. See the xref:../../../examples/nlp/README.adoc[Walkthrough in the /examples README].
+. In your development environment, mount all relevant artifacts including checkpoints and datasets from the host before you run the quick run commands. For more information on preparing a dataset, see xref:../../../README.adoc#Dataset preparation[Dataset preparation].
+
+=== Compile the Example Model and Generate a PEF
+
+. Set environment variables:
++
+```bash
+export CHECKPOINT=./Llama-2-7b-hf  # or meta-llama/Llama-2-7b-hf
+export DATASET=./ultrachat_dialogue;  # or container path to dataset
+export MAX_SEQ_LENGTH=4096
+export BATCH_SIZE=8
+export ARCH=sn30
+```
+. Move into the app directory and compile the model:
++
+[source,bash]
+----
+cd /opt/modelzoo/examples/nlp/training/
+
+python rdu_train_llm.py \
+    command=compile \
+    checkpoint.config_name=${CHECKPOINT} \
+    model.max_seq_length=${MAX_SEQ_LENGTH} \
+    training.batch_size=${BATCH_SIZE} \
+    samba_compile.arch=${ARCH} \
+    +samba_compile.target_sambaflow_version=MAJOR.MINOR.PATCH
+----
+
+See the xref:../../../examples/nlp/README.adoc[Walkthrough in the examples README] for information about the arguments and other details
+
+=== Run Training with the PEF
+
+Run the training script:
+
+[source,bash]
+----
+export PEF=/path/to/compiled/pef;
+python -u rdu_train_llm.py \
+    command=run \
+    checkpoint.model_name_or_path=${CHECKPOINT} \
+    model.max_seq_length=${MAX_SEQ_LENGTH} \
+    samba_run.pef=${PEF} \
+    training.dataset=${DATASET}
+----
+
+== Data Parallel Training
+
+See https://docs.sambanova.ai/runtime/latest/architecture.html#_data_parallel_applications[Data Parallel Applications] for a high-level overview of how data parallel applications work.
+
+See the xref:../../../examples/nlp/README.adoc[Walkthrough in the examples README] for detailed instructions.
+
+=== Compile the PEF for Data Parallel Training
+// TODO: Add note here about the rdu_train_llm_dp.py
+
+[source,bash]
+----
+python rdu_train_llm_dp.py \
+    command=compile \
+    checkpoint.config_name=${CHECKPOINT} \
+    model.max_seq_length=${MAX_SEQ_LENGTH} \
+    training.batch_size=${BATCH_SIZE} \
+    samba_compile.arch=${ARCH} \
+    +samba_compile.target_sambaflow_version=MAJOR.MINOR.PATCH
+----
+
+=== Train the Model with Multiple Workers
+
+[source,bash]
+----
+export PEF=/path/to/compiled/pef;
+/opt/mpich-3.4.3/bin/mpirun -np <NUM_PROCESSES> python -u rdu_train_llm_dp.py \
+    command=run \
+    checkpoint.config_name=${CHECKPOINT} \
+    model.max_seq_length=${MAX_SEQ_LENGTH} \
+    samba_run.pef=${PEF} \
+    training.dataset=${DATASET}
+----
+
+After several minutes, you should see the model begin to train and output logs that are similar to the following:
+
+[source,bash]
+----
+Number of epochs: 1
+Per worker batch size: 16
+Per worker number of batches: 2,622
+Per worker number of sequences: 41,952
+Number of DP workers: 2
+
+DP: 2-way, Epoch [1/1], Step [1/2622], Loss: 11.1906
+----
+
+== Troubleshooting
+// TODO: talk more about this. Or point to Troubleshooting doc!
+
+For additional logging to assist with debugging compilation, add the following flags to the compile command:
+[source,bash]
+----
++samba_compile.debug=True +samba_compile.verbose=True
+----
+
+For additional Troubleshooting information, see link:https://docs.sambanova.ai/developer/latest/modelzoo-troubleshooting.html[Model Zoo troubleshooting].
+
+== Limitations
+
+The example scripts have some limitations to reduce complexity and to make them easier to read. Here's a non-exhaustive list of limitations compared to production training code:
+
+* Missing hyperparameter control
+    ** Weight decay
+    ** Dropout
+    ** Warmup/LR scheduling
+* Dataset
+    ** The dataset is not reshuffled at the start of each epoch
+
+== Comparing RDU and CPU scripts
+
+A separate script `cpu_train_llm.py` demonstrates how to run a Model Zoo model on CPU. This script is intended to allow you to compare the code for RDU and for CPU and to better understand the SambaFlow software stack. View `cpu_train_llm.py` and `rdu_train_llm.py` side by side or compare them in your code editor.
+
+NOTE: Because the CPU script is intended as an example, we've tested it only with Llama 2 7B.
+
+=== Commonalities between RDU and CPU script
+
+==== Model
+
+
+* Model Zoo models still conform to the original Hugging Face checkpoint compatibility.
+* To load an open source checkpoint into a Model Zoo model, follow these steps:
+    ** `AutoConfig.from_pretrained` to load the original model config.
+    ** `ConfigurationTransformer` to transform the config into Model Zoo model config.
+    ** Use either `AutoModelForCausalLM.from_pretrained` or `AutoModelForCausalLM.from_config` to construct the Model Zoo model with transformed config and optionally load the pretrained weights/checkpoints.
+
+==== Optimizer
+
+* The Model Zoo model uses the adamW optimizer for training.
+
+==== Datasets
+
+* The datasets are prepared using the `generative_data_prep` library and loaded using the dataloader in `utils/dataset.py`
+
+==== Training
+
+* Training consists of running the forward, backward, and optimizer steps.
+* Instead of doing a mean reduction of the Cross Entropy Loss over each next work, a custom gradient scale is used to account for padding in the dataset.
+
+==== Checkpoint 
+
+* A Hugging Face format checkpoint is saved at the end of training.
+* A `summary.txt` file is also saved.
+
+
+=== Key differences between RDU and CPU script
+
+==== Compilation & Tracing
+
+* The RDU flow is split into compile and run steps. The CPU flow does not have a compile step (just run). 
+* On RDU, the compilation phase builds an __execution graph__ by passing an input to the model and tracing the performed operations. Then, the compiler maps these operations to fuse/parallelize/optimize and fit the operations on-chip (on RDU). This information is saved in a PEF file for the run phase.
+* During run, the execution graph is __traced__ from the PEF and deployed on to the RDU. Then, the app can move the model weights from CPU to RDU and perform training.
+* Currently we do not provide a precompiled kernel library, but rather compile / compose the kernel graph on-the-fly during compilation.
+
+==== Model
+
+* The model needs to be moved to RDU after loading in the RDU script. This requires both converting torch tensors to SambaTensors using `samba.from_torch_model(model)`, and also moving the weights to RDU/tracing the PEF (see comments in code).
+
+==== Optimizer
+
+* The optimizer is loaded from `samba` instead of from the `torch` library
+* The optimizer step is not run explicitly. Please see the training section below for more details.
+
+==== Dataset
+
+* There are no differences between dataset (loading or otherwise)
+
+==== Training
+
+* In the RDU script, when tensors are cast to SambaTensor and moved to RDU, they need specific names for the compiler to know where to place them in the execution graph.
+* The CPU script which runs forward, backward, and optimizer step explicitly. The RDU script runs the steps in a single call to `samba.session.run`. This runs the full execution graph end to end (forward, backward, optim).
+* Because all three steps are done in a single call, we need a way to tell the RDU how to scale each element of the loss gradient when running backward. This is done by assigning an `.sn_grad` value to each element in the loss tensor.
+
+==== Checkpoint
+
+* There are no differences in saving a checkpoint between the example CPU and RDU scripts.
+
+== See Also
+
+* See xref:../README.adoc[the /examples README] for a detailed walkthrough. 
+* See the README files for each model in `sambanova_modelzoo/nlp` for some details about each supported model. 
+* See link:https://docs-staging.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo best practices] for a discussion of making changes to a model, a list of tested checkpoints, and more. 
