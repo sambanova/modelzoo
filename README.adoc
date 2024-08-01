@@ -7,37 +7,54 @@ image:https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelCo
 :toc:
 
 
-The SambaNova Model Zoo repository includes sample model source code for deployment on SambaNova hardware, along with example applications for compiling and running models on SambaNova DataScale systems.
+The SambaNova Model Zoo repository includes RDU-compatible source code, along with example applications for compiling and running models on SambaNova hardware.
 
-The customized model source code is available for several popular open source models and illustrates how to write code that is compatible with SambaNova hardware. Source code and example apps together enable developers to learn about the SambaNova model infrastructure and to explore the capabilities of our DataFlow architecture.
+The customized model source code is available for several popular open source models and illustrates how to write code that is compatible with RDUs. Source code and example apps together enable developers to learn about the SambaNova model infrastructure and to explore the capabilities of our Dataflow architecture.
 
-README files in the repo explain how to set up the environment, compile and run the models, and modify model parameters, and source code. For best practices, troubleshooting info, and an API Reference, see link:https://docs.sambanova.ai[docs.sambanova.ai].
+[NOTE]
+====
+If you are interested in trying out SambaNova Model Zoo on RDU: 
+
+* Existing customers: Contact your customer support representative. 
+* New users: Contact us at help@sambanova.ai
+==== 
+
+README files in the repo explain how to set up the environment, compile and run the models, and modify model parameters and source code. For supported workflows, best practices, troubleshooting info, and an API Reference, see link:https://docs.sambanova.ai[docs.sambanova.ai].
+
+== Getting Started
+
+To get started with SambaNova Model Zoo:
+
+* The link:https://docs.sambanova.ai/developer/latest/modelzoo-relnotes.html[Model Zoo Release Notes] list all features, some caveats, and include links to all README files and other documentation. 
+* README files and documents in this repo explain how to set up the environment, compile and run the models. For example: 
+** xref:examples/nlp/README.adoc[Walkthrough: Inference and Fine-tuning with Llama2 7B for Chat]
+** xref:docs/container-setup.adoc[Container Setup Guide]
++
+See link:https://docs.sambanova.ai/developer/latest/modelzoo-relnotes.html#_documentation[Documentation] for a complete list. 
+* The link:https://docs.sambanova.ai[developer documentation] provides more details on supported workflows, best practices, troubleshooting info, and an link:https://docs.sambanova.ai/api-reference/index.html[API Reference]. It also discusses link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html#_making_changes_to_model_zoo_models[How to make changes to Model Zoo models].
+
 
 
 == Structure
 
 docs/::: Additional documentation for setting up the environment.
-examples/::: ML examples apps directory.
-    examples/nlp/:: Example scripts to run training and inference using models under `sambanova_modelzoo/models/`. See the link:https://github.com/sambanova/modelzoo/tree/main/examples/nlp[examples README] for a full walkthrough.
+examples/::: ML example apps directory.
+    examples/nlp/:: Example apps to run training and inference using models under `sambanova_modelzoo/models/`. See the xref:examples/nlp/README.adoc[examples README] for a full walkthrough.
 requirements/::: Directory to store python requirements for different environments. 
 sambanova_modelzoo/::: Python namespace for the Model Zoo package.
     sambanova_modelzoo/libs/::  Directory for ML libraries. These are used by the ML example apps.
     sambanova_modelzoo/models/:: Directory for ML model implementations specific to RDU.
-tests/::: Set of pytests for sambanova_modelzoo.
+
 
 == Prerequisites
 
-To use the code in this repo, you need:
+To use Model Zoo, you need to do some setup. See the xref:docs/container-setup.adoc[Container Setup Guide] for details. Here's an overview:
 
 . A virtualization platform (__Podman__, __Singularity__, __Docker__) to run a development container.
-+
-Podman is an open-source alternative to Docker. Most commands can be run unchanged using `podman` instead of `docker`.
 
-. A development container that has dependencies pre-installed (e.g. `python`, `sambaflow`, `torch`). SambaNova customers can contact Customer Support for download instructions. 
+. A development container (Devbox) that has dependencies pre-installed (e.g. `python`, `sambaflow`, `torch`). SambaNova customers can contact Customer Support for download instructions. 
 
 . The code you want to run.
-+
-You can either clone this repo or install the `sambanova_modelzoo` package from an index from within the container.
 
 . Access to a SambaNova DataScale system (RDU platform).
 
@@ -48,15 +65,13 @@ Follow all of these steps on a SambaNova DataScale system. You may be able to re
 
 === Set up the Virtualization Platform and the Container
 
-Follow the steps in the xref:docs/container-setup.adoc[container setup doc].
+Follow the steps in the xref:docs/container-setup.adoc[Container Setup Guide].
 
 === Clone this Repository
 [source,shell]
 ----
 git clone https://github.com/sambanova/modelzoo.git
 ----
-
-You can also download a zip of the repo.
 
 === Deploy the Development Container
 Although each virtualization platform requires different steps to run the development container, the overall process is the same. Running requires:
@@ -65,7 +80,7 @@ Although each virtualization platform requires different steps to run the develo
 . Pulling (downloading) a container image
 . Running a container from the container image
 
-For details, see xref:docs/container-setup.adoc[container setup doc].
+For details, see the xref:docs/container-setup.adoc[Container Setup Guide].
 
 === Running an App 
 
@@ -76,7 +91,7 @@ Now that you're inside the development container, install the Model Zoo python p
 cd /opt/modelzoo
 pip install -r requirements/requirements.txt
 
-# Install the Model Zoo package
+# Install the Model Zoo package in editable mode
 pip install -e .
 ```
 
@@ -98,12 +113,17 @@ With that, you can head over to the xref:examples/nlp/README.adoc[Walkthrough in
 
 == See Also
 
-* README files at different levels of the hierarchy have the step-by-step instructions you need to run generation or training on your SambaNova system. They include: 
+* README files at different levels of the hierarchy have the step-by-step instructions you need to run text generation or training on your SambaNova system. They include: 
 ** The README at xref:examples/nlp/README.adoc[examples/nlp/README] has a full walkthrough of both inference and fine tuning. 
 ** One level lower, the two README files at xref:examples/nlp/text_generation/README.adoc[examples/nlp/text_generation/README] and xref:examples/nlp/training/README.adoc[snapps/nlp/examples/training/README] have Quick Run instructions for copy-paste when you're already familiar with the workflow, and a discussion of differences and commonalities between RDU and CPU. 
-* Code coments and detailed comments in our config.yaml files also support coming up to speed quickly. 
+* Code comments and detailed comments in our config.yaml files also support coming up to speed quickly. 
 * link:https://docs.sambanova.ai/home/latest/index.html[SambaNova developer documentation] includes a discussion of the Modelzoo architecture and workflows, Best practices, and Troubleshooting. 
 * The link:https://docs.sambanova.ai/api-reference/index.html[SambaFlow API Reference] has details about the classes, methods, and operators used by Model Zoo. 
+NOTE: In some cases, the code contains operators (e.g. `gather` and `scatter`) that map to a corresponding `sn_*` operator (e.g. `sn_gather` and `sn_scatter`). 
+
+== Support
+
+If you would like to open a support case with SambaNova, please email help@sambanova.ai ensuring the use of `Model Zoo` in the subject line. We're here to help!
 
 == License
 

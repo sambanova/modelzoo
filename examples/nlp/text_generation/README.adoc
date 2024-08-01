@@ -1,10 +1,10 @@
-= About the Generation Scripts
+= About the Generation Example Apps
 
-The generation scripts illustrate how you can run generation with a model that's been customized for RDU on a SambaNova system. These scripts are meant to show how things work and are not intended for use in production.
+The generation example apps illustrate how you can run generation with a model that's been customized for RDU on a SambaNova system. These examples are meant to show how things work and are not intended for use in production.
 
-* `cpu_generate_text.py` — Simple generation script on CPU to allow you to compare CPU and RDU. Tested only on Llama-2 7B.
+* `cpu_generate_text.py` — Simple app for running generation on CPU to allow you to compare CPU and RDU. Tested only on Llama-2 7B.
 
-* `rdu_generate_text.py` — Script for running generation on RDU with a large language model. This script expects customized model code, like the model code in the `/models` folder.
+* `rdu_generate_text.py` — Simple app for running generation on RDU with a large language model. This app expects customized model code, like the model code in the `/models` folder.
 
 For a full walkthrough, including environment setup and how to download a checkpoint see the xref:../../../examples/nlp/README.adoc[/examples README]. This file only has a Quick Run section and a discussion of the differences between running on CPU and running on RDU.
 
@@ -57,16 +57,16 @@ checkpoint.model_name_or_path=PATH_TO_DOWNLOADED_MODEL \
 samba_run.pef=PATH_TO_PEF generation.prompts=['YOUR_PROMPT_HERE']
 ----
 
-== Comparing RDU and CPU scripts
+== Comparing RDU and CPU example apps
 
-A separate script `run_generation_torch.py` demonstrates how to run a Model Zoo model on CPU. This script is mainly intended to allow you to compare the code for RDU and for CPU and to better understand the SambaFlow software stack.
+A separate app `cpu_generate_text.py` demonstrates how to run a Model Zoo model on CPU. This app is mainly intended to allow you to compare the code for RDU and for CPU and to better understand the SambaFlow software stack.
 
-NOTE: Because the CPU script is intended as an example, we've tested it only with Llama 2 7B.
+NOTE: Because the CPU app is intended as an example, we've tested it only with Llama 2 7B.
 
 
-=== Commonalities between RDU and CPU script
+=== Commonalities between RDU and CPU example apps
 
-* Model Zooo models conform to the original Hugging Face checkpoint compatibility.
+* Model Zoo models conform to the original Hugging Face checkpoint compatibility.
 * To load open an source checkpoint into a Model Zoo model, follow these steps:
     ** `AutoConfig.from_pretrained` to load the original model config.
     ** `ConfigurationTransformer` to transform the config into Model Zoo model config.
@@ -75,7 +75,7 @@ NOTE: Because the CPU script is intended as an example, we've tested it only wit
 * All Model Zoo models are modified to use right padded input_ids instead of the original left padding. `sn_model.init_inputs_processor` overwrites the `prepare_inputs_for_generation` function inside each modeling code to enable Model Zoo specific input preparations. See `modelzoo/lib/clm_runtime.py` for more details.
 
 
-=== Key differences between RDU and CPU script
+=== Key differences between RDU and CPU example apps
 
 
 * RDU frontend API has a separated compilation phase to generate a PEF to be used at runtime. The reason is that currently we do not provide a precompiled kernel library, but compile / compose the kernel graph on-the-fly during the compilation for RDU. * `CachedInferenceCompiler::compile` is provided for the convinience of compiling text generation models on RDU.
@@ -88,4 +88,4 @@ NOTE: Because the CPU script is intended as an example, we've tested it only wit
 
 * See xref:../README.adoc[the /examples README] for a detailed walkthrough. 
 * See the README files for each model in `sambanova_modelzoo/nlp` for some details about each supported model. 
-* See link:https://docs-staging.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo best practices] for a discussion of making changes to a model, a list of tested checkpoints, and more. 
+* See link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo best practices] for a discussion of making changes to a model, a list of tested checkpoints, and more. 

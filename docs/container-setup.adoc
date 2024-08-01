@@ -59,7 +59,7 @@ Internal developers::
 
 === Pulling a Container Image
 
-The xref:VERSIONS.yaml[VERSIONS.yaml] contains the path to the image and information regarding compatible SambaFlow Runtime and Compiler versions.
+The xref:../VERSIONS.yaml[VERSIONS.yaml] contains the path to the image and information regarding compatible SambaFlow Runtime and Compiler versions.
 
 When you have access to the container registry, you can pull the container image. 
 
@@ -81,7 +81,7 @@ TIP: If you run `podman pull` as a non-root user and run into permission errors,
 
 === Running a Container from the Image
 
-To start the container with Podman, run:
+To start the container with Podman, run the following command from the root directory of this repo:
 
 [source,shell]
 ----
@@ -164,7 +164,7 @@ In Singularity, the container image to pull is specified inside a `.sif` file. A
 singularity run /path/to/.sif
 ----
 
-To start the development container environment, run:
+To start the development container environment, run the following command from the root directory of this repo:
 [source,shell]
 ----
 ./start_container.sh [-b bind_mount_path...] <SIF>
@@ -208,7 +208,7 @@ To check that SambaFlow is accessible, run:
 python -c 'import sambaflow; print(sambaflow.__version__)'
 ```
 
-If you see a version number such as `1.21.1`, then congratulations! You're now in the development environment 🎉.
+If you see a version number that matches the SambaFlow version in the xref:../VERSIONS.yaml[VERSIONS.yaml] doc (i.e. `1.21.1`), then congratulations! You're now in the development environment 🎉.
 
 * The current directory is mounted under `/opt/modelzoo`
 * SambaFlow is installed under `/opt/sambaflow`

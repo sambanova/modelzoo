@@ -3,7 +3,7 @@
 Model Zoo models are popular open source models that have been customized to run on SambaNova hardware. 
 
 * This folder has the model source code and supporting files. 
-* The `examples/nlp` folder has example scripts for running training and inference with these models. 
+* The `examples/nlp` folder has example apps for running training and inference with these models. 
 
 == Files and Folders
 
@@ -15,9 +15,9 @@ Each model includes the following files:
 * `requirements_xyz.py`. Script that checks dynamic requirements for the model, such as the transformers version, in the `is_accepted` function.
 * `plugins_xyz.py`. Defines a `ConfigurationTransformerPlugin` for xyz that is registered when loaded.
 * `\__register__.py`. Imports for all the plugins and classes for a model.
-* README.adoc. Short summary of the model. Because the changes to each model are quite small, the Hugging Face model corresponging to the SambaNova novel has the details. 
+* `README.adoc`. Model card - a short summary of the model. For each model, the changes we made to the original Hugging Face model are quite small. As a result, most of the details in the Hugging Face model card apply to the SambaNova model as well. 
 
 In addition, each model includes the following folders that are primarily used internally: 
 
-* `configs` folder includes a whitelist.json that specifies the parameter combinations that we have tested with. 
-* `heurists` folder includes files that are used by the compiler. DO NOT change the files in the `heuristics` folder
+* `configs` folder includes a whitelist.json that is an internal file used by the parameter validator. DO NOT change any values in this file. 
+* `heuristics` folder includes files that are used by the compiler. DO NOT change the files in the `heuristics` folder.

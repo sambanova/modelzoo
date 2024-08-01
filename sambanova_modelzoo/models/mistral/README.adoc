@@ -21,7 +21,7 @@ Our models expect data in HDF5 format. See the SambaNova data preparation script
 
 == Model Parameters and Configuration
 
-See link:https://docs-staging.sambanova.ai/developer/latest/modelzoo-best-practices.htm[Model Zoo Best Practices] for a discussion of modification options and limitations.  
+See link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] for a discussion of modification options and limitations.  
 
 == Supported Models
 Model Zoo currently supports the following Mistral versions: 
@@ -29,5 +29,5 @@ Model Zoo currently supports the following Mistral versions:
 * Mistral-7B-v0.1
 
 
-link:https://docs-staging.sambanova.ai/developer/latest/modelzoo-best-practices.htm[Model Zoo Best Practices] lists the checkpoints that we have tested, but you can use other Hugging Face checkpoints for the corresponding model. 
+link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] lists the checkpoints that we have tested, but you can use other Hugging Face checkpoints for the corresponding model. 
 
