@@ -1,4 +1,3 @@
-image:https://dl.circleci.com/status-badge/img/gh/sambanova/modelzoo/tree/main.svg?style=svg&circle-token=CCIPRJ_UeoTB4F1jEnjYm2w6mYLUs_e91caec2279f2cd31507f6f4ebb9c1057b6fcb66["CircleCI", link="https://dl.circleci.com/status-badge/redirect/gh/sambanova/modelzoo/tree/main"]
 image:https://codecov.io/gh/sambanova/modelzoo/graph/badge.svg?token=dFj2NRzSEp["codecov", link="https://codecov.io/gh/sambanova/modelzoo"]
 image:https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white["pre-commit", link="https://github.com/pre-commit/pre-commit"]
 image:https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336["isort", link="https://pycqa.github.io/isort"]
