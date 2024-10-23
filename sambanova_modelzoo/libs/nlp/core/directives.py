@@ -24,3 +24,11 @@ def sdpa_directives(directives: Dict[str, Any]):
         import sambaflow.samba as samba
         return samba.directives.sdpa_directives(directives)
     return nullcontext()
+
+
+def disable_graphamp():
+    """'Disable graphmap' directive context"""
+    if not is_jit():
+        import sambaflow.samba as samba
+        return samba.session.disable_graphamp()
+    return nullcontext()

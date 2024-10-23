@@ -16,12 +16,12 @@ from typing import Tuple
 
 import torch
 
-from sambanova_modelzoo.libs.nlp.core.token_utils import ARTICLE_SEP_TOKEN_TYPE_ID, PADDING_TOKEN_TYPE_ID
+from .token_utils import ARTICLE_SEP_TOKEN_TYPE_ID, PADDING_TOKEN_TYPE_ID
 
 
 def get_collapsed_article_attention_mask(target_token_type_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Article attention mask causes tokens to only attend to other tokens in the same article.                                                                         
+    An article attention mask causes tokens to only attend to other tokens in the same article.                                                                         
                                                                                                                         
     The attention mask is defined by having a 1 at row i, column j if you should attend to token j when learning to
     generate token i+i. Otherwise it will be 0's.                                                                                           
@@ -35,6 +35,7 @@ def get_collapsed_article_attention_mask(target_token_type_ids: torch.Tensor) ->
     more info: https://github.sambanovasystems.com/SambaNova/generative_data_prep#output-1
 
     The attention mask generated on chip will be:
+    # TODO: Do we want to say "chip" or RDU? (throughout)
     1 0 0 0 0 0                                                                                                         
     1 1 0 0 0 0                                                                                                         
     0 0 0 0 0 0                                                                                                         
@@ -42,17 +43,18 @@ def get_collapsed_article_attention_mask(target_token_type_ids: torch.Tensor) ->
     0 0 0 1 1 0                                                                                                         
     0 0 0 0 0 0 
 
-    Collapsed article attention mask is a pair of tensor used to construct the above full  article attention mask 
-    on chip.  We do not want to directly construct the full size article attention mask and transfer it to the chip
-    because the mask would be of O(seq_len^2) which can be bandwidth heavy.
+    A collapsed article attention mask is a pair of tensors that is used to construct the above full article  
+    attention mask on chip. We do not want to construct the full article attention mask and transfer it to 
+    the chip because the mask would be of O(seq_len^2) which can be bandwidth heavy.
 
     The reference of on-chip expansion can be found in models.custom_ops.create_article_attention custom ops.
 
     Args:
         target_token_type_ids: [batch_size x sequence_length] The token type ids of the gold tokens the model must predict.
+        # TODO: What's a gold token in this context? 
 
     Returns:
-        The article attention mask represented by two collapsed tensors.  The actual article attention mask
+        The article attention mask represented by two collapsed tensors. The actual article attention mask
         is of size [batch_size, 1, sequence_length, sequence_length] generated on chip. The two collapsed tensors are 
         each of size [batch_size, 1, 1, sequence_length].
     """
@@ -74,12 +76,13 @@ def get_collapsed_article_attention_mask(target_token_type_ids: torch.Tensor) ->
             elif start_index is None and token_type_id not in end_token_ids:
                 start_index = token_idx + 1
 
-    # do an unsqueeze to convert our attention mask from [bs, ss] to [bs, 1, ss].  This is required so that we
+    # do an unsqueeze to convert our attention mask from [bs, ss] to [bs, 1, ss]. This is required so that we
     # can create the transposed attention mask which is of size [bs, ss, 1]
     attention_mask = attention_mask.unsqueeze(1)
     attention_mask_t = attention_mask.clone().transpose(-1, -2)
     attention_mask_t[attention_mask_t == 0] = -1
-    # do an extra unsqueeze here so we don't need to reshape on chip.  This ensures that the mask gets broadcasted
+    # do an extra unsqueeze here so we don't need to reshape on chip. This ensures that the mask gets broadcast
     # across the head dimension.
+    # TODO: What's a head dimension?
     attention_mask, attention_mask_t = (mask.unsqueeze(1) for mask in [attention_mask, attention_mask_t])
     return attention_mask, attention_mask_t

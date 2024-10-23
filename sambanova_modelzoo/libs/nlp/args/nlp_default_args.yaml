@@ -1,0 +1,36 @@
+# Copyright 2024 SambaNova Systems, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+samba_compile:  
+  # Compiler optimization mode. Specify `nlp` to optimize models based on a transformers architecture. No other options are currently supported. 
+  compiler_mode: nlp
+  # The SambaFlow compiler performs blfoat16 computation by default. 
+  # This flag forces operators to be in float32/bfloat16 mixed precision.
+  # See https://docs.sambanova.ai/developer/latest/mixed-precision.html for background information. 
+  enable_mixed_precision_ops:
+      - gemm
+      - softmax
+  # Legacy option. Do not change.
+  enable_multi_input_broadcast: True
+  # Accumulation mode for tiling, bf16sr means bf16 inputs with stochastic rounding.
+  tiling_accum: bf16sr
+  # A legacy flag for CrossEntropyLoss.
+  use_air_ce: True
+  # Enable HBM allocation for sn40
+  all_regions_hbm: True
+  # Number of tiles to be used on chip. If you don't set num_tiles=4 on an SN30 system,
+  # the compiler uses tensor parallel mode, which is not currently supported with Model Zoo. 
+  num_tiles: 4
+  # HBM/DRAM auto allocation algorithm
+  hbm_auto_alloc: linear_scan

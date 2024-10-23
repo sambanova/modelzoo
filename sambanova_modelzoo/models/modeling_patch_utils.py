@@ -52,18 +52,18 @@ def finfo_float32_min_patch(val: float = MASK_MIN_VALUE):
     """
     Within the context, change the torch.finfo(torch.float32).min to a very negative number.
 
-    1. Model may call torch.tensor(float32.min) * 0. This gives 0 on both CPU and RDU which abides the IEEE standard.
-    2. torch.tensor(float32.min).bfloat16() * 0 = -inf * 0 = NaN on both CPU and RDU which also abides the IEEE standard.
+    1. Model may call torch.tensor(float32.min) * 0. This gives 0 on both CPU and RDU which meets the IEEE standard.
+    2. torch.tensor(float32.min).bfloat16() * 0 = -inf * 0 = NaN on both CPU and RDU which also meets the IEEE standard.
     3. However, Sambaflow mixed precision compilation support may cast float32 number to bfloat16. 
-    The bfloat16 conversion on float32.min yeilds -inf and then multiplying 0 yields NaNs.
+    The bfloat16 conversion to float32.min results in -inf. Multiplying -if with 0 results in NaNs.
 
-    To work with float32/bfloat16 mixed precision mode, this utility can be used when the following criterias apply:
+    To work with float32/bfloat16 mixed precision mode, this utility can be used when the following criteria apply:
     1. float32.min multipled by zero.
     2. Auto precision casting is enabled during compilation (which happens by default right now).
 
-    Here we instead uses a very negative number to replace float32.min. It works statistically fine for mask generation
-    where float32.min is commonly used. The mask gets softmaxed later on so the effects of value itself gets insignificant
-    numerically.
+    Instead, we use a very negative number to replace float32.min. It works statistically fine for mask generation
+    where float32.min is commonly used. The mask gets softmaxed later on so the effects of the value itself 
+    becomes insignificant numerically.
     """
     original_finfo = torch.finfo
     torch.finfo = FinfoPatch(val, original_finfo)
@@ -73,7 +73,7 @@ def finfo_float32_min_patch(val: float = MASK_MIN_VALUE):
 
 def sn_patch_lazy_init_weights(self, module):
     """
-    Patch lazy init of weights. This has a sambaflow dependency and must be done only when is not JIT
+    Patch lazy init of weights. This has a SambaFlow dependency and must be done only when is not JIT
     """
     from sambanova_modelzoo.models.lazy_init import sn_init_weights
     sn_init_weights(self, module)

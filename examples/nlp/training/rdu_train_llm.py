@@ -107,7 +107,7 @@ def compile(cfg: RDUTrainingConfig, tracing_inputs: Dict[str, "torch.tensor"], m
 
     # Get the arguments for the compiler
     compile_dict = cfg.samba_compile.model_dump()
-    
+
     # Will error out if the input configuration is not supported by SambaNova. Add `job_config.validate_config=False` to bypass this check
     SNAutoConfigValidator.validate(model_config=model.config, job_config=cfg)
     # Embed some metadata in the PEF.
@@ -219,7 +219,12 @@ def main(cfg: RDUTrainingConfig):
     # The input tensors need to match their unique names at runtime.
     samba_tensor_names = SambaPretrainInputNames()
 
+    break_training = False
+
     for epoch in range(cfg.training.num_epochs):
+        if break_training:
+            break
+
         print(f'Loading dataset for epoch {epoch + 1}...')
         dataloader = load_dataset(cfg.training, cfg.model.max_seq_length)
         num_batches = len(dataloader)
@@ -255,6 +260,10 @@ def main(cfg: RDUTrainingConfig):
             loss *= grad_scale.float()
             avg_step_loss = loss.sum().item()
             print(f'Epoch [{epoch+1}/{cfg.training.num_epochs}], Step [{i+1}/{num_batches}], Loss: {avg_step_loss:.4f}')
+            
+            if i+1 == cfg.training.end_early_at_step:
+                break_training = True
+                break
 
     print('Finished training.')
 

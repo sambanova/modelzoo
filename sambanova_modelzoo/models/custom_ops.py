@@ -13,13 +13,13 @@
 # limitations under the License.
 
 from numbers import Number
-from typing import List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from sambanova_modelzoo.models.modeling_patch_utils import MASK_MIN_VALUE, finfo_float32_min_patch
 from sambanova_modelzoo.models.utils import is_jit
 
-### Samba/JIT wrapper functions
+### Samba/JIT wrapper functions. JIT is currently a SambaNova internal initiative.
 
 Tensor = Union['SambaTensor', torch.Tensor]
 
@@ -50,7 +50,7 @@ def triu_fill(input, value: float):
     if not is_jit():
         import sambaflow.samba as samba
         return samba.triu_fill(input, value)
-    return input.masked_fill(torch.ones(input.shape).triu(1).to('rdu').bool(), value)
+    return torch.ops.torch_rdu.triufill_air(input, value)
 
 
 def sliding_window_fill(x: Tensor,
@@ -170,3 +170,51 @@ def addmm(input: Tensor,
         raise NotImplementedError()
     import sambaflow.samba as samba
     return samba.addmm(input, mat1, mat2, beta=beta, alpha=alpha, out=out, is_transposed=is_transposed)
+
+
+def sn_multinomial(probs: Tensor, pre_generated_randoms: Tensor) -> Tensor:
+    """Refer to sn_multinomial"""
+    if is_jit():
+        raise NotImplementedError("Not implemented for JIT yet")
+    from sambaflow.samba.sn_private import sn_multinomial
+    return sn_multinomial(probs, pre_generated_randoms)
+
+
+def sn_zipmapreduce(func: Callable[[Dict[str, Any], Iterable[Tensor]], Tensor],
+                    inputs: List[Tensor],
+                    reduce_func: Optional[str] = None,
+                    reduce_dim: Optional[Union[int, List[int]]] = None,
+                    stoc_accum: Optional[bool] = False) -> Tensor:
+    """Refer to sn_zipmapreduce"""
+    if is_jit():
+        raise NotImplementedError("Not implemented for JIT yet")
+    from sambaflow.samba.functional.stir import sn_zipmapreduce
+    return sn_zipmapreduce(func=func,
+                           inputs=inputs,
+                           reduce_func=reduce_func,
+                           reduce_dim=reduce_dim,
+                           stoc_accum=stoc_accum)
+
+
+def sn_imm(input: Union[float, int], dtype: torch.dtype) -> Tensor:
+    """Refer to sn_imm"""
+    if is_jit():
+        raise NotImplementedError("Not implemented for JIT yet")
+    from sambaflow.samba.functional.stir import sn_imm
+    return sn_imm(input=input, dtype=dtype)
+
+
+def sn_iteridx(attrs: dict, dim: int, dtype: Optional[torch.dtype] = None) -> Tensor:
+    """Refer to sn_iteridx"""
+    if is_jit():
+        raise NotImplementedError("Not implemented for JIT yet")
+    from sambaflow.samba.functional.stir import sn_iteridx
+    return sn_iteridx(attrs=attrs, dim=dim, dtype=dtype)
+
+
+def sn_select(cond: Tensor, true_val: Tensor, false_val: Tensor) -> Tensor:
+    """Refer to sn_select"""
+    if is_jit():
+        raise NotImplementedError("Not implemented for JIT yet")
+    from sambaflow.samba.functional.stir import sn_select
+    return sn_select(cond=cond, true_val=true_val, false_val=false_val)

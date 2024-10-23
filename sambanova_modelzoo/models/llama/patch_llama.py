@@ -1,4 +1,9 @@
-# Modifications Copyright 2024 by SambaNova Systems, Inc. All rights reserved.
+# coding=utf-8
+# Copyright © 2023-2024 by SambaNova Systems, Inc. Disclosure, reproduction,
+# reverse engineering, or any other use made without the advance written
+# permission of SambaNova Systems, Inc. is unauthorized and strictly
+# prohibited. All rights of ownership and enforcement are reserved.
+
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -30,7 +35,7 @@ from sambanova_modelzoo.models.custom_ops import create_3d_attn_mask, triu_fill,
 from sambanova_modelzoo.models.llama.heuristics.hyperfunction_llama import LlamaHyperfunction
 from sambanova_modelzoo.models.modeling_patch_utils import MASK_MIN_VALUE
 from sambanova_modelzoo.models.modeling_utils import (apply_rotary_pos_emb, get_cos_sin_cache, get_position_ids,
-                                     get_sliced_hidden_states, update_kv_cache, GlobalNamedTensor)
+                                     get_sliced_hidden_states, update_kv_cache, TensorCache)
 from sambanova_modelzoo.models.utils import init_weights, logger_info, is_jit
 
 from torch import nn
@@ -39,19 +44,21 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
-"""
-This Llama patch is based off Huggingface with transformers==4.31.0
+tensor_cache = TensorCache()
 
-The followings are SambaNova specific prerequisites to successfully use the modified model:
+"""
+This Llama patch is based off the Hugging Face model with transformers==4.31.0
+
+The following are SambaNova specific prerequisites to successfully use the modified model:
 
 1. For training, article attention is always used to restrict attention to be within an article. See create_3d_attn_mask.
    The attention_mask needs to be passed as Tuple[torch.Tensor, torch.Tensor] and gets expanded inside the model (on-chip).
 2. For inference, always set use_cache=True, e.g. cached inference. The input_ids must be right padded for the first pass,
-   e.g. cache generation pass. In the following pass (token generations), the input_ids must be of sequence_length 1.
-   Refer to CachedInferenceRuntime for how to prepare inputs to work with Huggingface's model.generate.
-3. Prepare input_ids and labels to be sliced outside of the model so that inputs[0:n] predicts label[n]. This is for performance
-   consideration as shifting/slicing is currently not performant on RDU.
-   The recommended shifting/slicing on inputs and labels is as the followings:
+   e.g. cache generation pass. In the following pass (token generation), the input_ids must be of sequence_length 1.
+   See CachedInferenceRuntime for how to prepare inputs to work with Hugging Face's model.generate function.
+3. Prepare input_ids and labels to be sliced outside the model so that inputs[0:n] predicts label[n]. This improves 
+   performance because shifting/slicing is currently not performant on RDU.
+   The recommended shifting/slicing on inputs and labels is as follows:
         sentence = sentence[..., :-1]
         labels = labels[..., 1:]
    Or simply shift the labels and use CrossEntropyLoss to ignore the last token prediction, for example,
@@ -70,7 +77,7 @@ def llama_mha(q: torch.Tensor,
               mixedp_attn: bool,
               use_gqa: bool = False):
     """
-    Huggingface version of normal MHA, e.g. LlamaAttention
+    Hugging Face version of normal MHA, e.g. LlamaAttention
     NOTE: Key should be already transposed for the first matmul.
     """
     if mixedp_attn:
@@ -103,8 +110,8 @@ def llama_mha(q: torch.Tensor,
 
     if isinstance(attention_mask, tuple):
         # 3D on-chip mask generation
-        # apply the block diagonal 3D mask, the masked_fill operation above did the upper triangular masking
-        # already, which allows us to use a block diagonal 3D mask instead of requiring us to construct a lower
+        # apply the block diagonal 3D mask, the masked_fill operation above does the upper triangular masking
+        # already, which allows us to use a block diagonal 3D mask instead of having to construct a lower
         # triangular block diagonal mask
         attention_mask = create_3d_attn_mask(attention_mask, mixedp_attn, 0, MASK_MIN_VALUE)
 
@@ -120,7 +127,7 @@ def llama_mha(q: torch.Tensor,
         attn_weights = attn_weights + attention_mask
 
     # [SambaNova] use mixedp softmax not float32
-    # Do not enforce fully fp32 attention, instead the compiler will determin whether to do fp32 or fp32/bf16 mixp
+    # Do not enforce full fp32 attention, instead the compiler will determine whether to do fp32 or fp32/bf16 mixp
     # attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
     attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(q.dtype)
     attn_output = torch.matmul(attn_weights, v)
@@ -150,14 +157,13 @@ def llama_sdpa_switch(q: torch.Tensor,
                       use_gqa: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Switches between different versions of scale dot product attention (SDPA)
-    Description of SDPA can be found in go/flash-attention or go/air-sdpa-mapping
     Args:
-        q: Query states, input to sdpa.
+        q: Query states, input to SDPA.
         k: Key states, input to sdap.
-        v: Value states, input to sdpa.
-        attention_mask: If is a tuple, it will be viewed as a pair of collapsed 3D article mask, input to sdpa.
-        is_causal: Whether to use causal masking, input to sdpa.
-        dropout_p: Dropout percentage, input to the sdpa.
+        v: Value states, input to SDPA.
+        attention_mask: If is a tuple, it will be viewed as a pair of collapsed 3D article mask, input to SDPA.
+        is_causal: Whether to use causal masking, input to SDPA.
+        dropout_p: Dropout percentage, input to SDPA.
         use_segmented_softmax_attn: Controls whether to use segmented softmax attention.
         seg_softmax_block_size: Controls the block size used in segmented softmax attention
         mixedp_attn: Controls the precision of the computation:
@@ -167,7 +173,7 @@ def llama_sdpa_switch(q: torch.Tensor,
         use_gqa: Whether to use group query attention
 
     Returns:
-        A tuple of tensors. The first tensor is the output of sdpa, second tensor is attention score, the result of softmax in sdpa.
+        A tuple of tensors. The first tensor is the output of SDPA, second tensor is attention score, the result of softmax in SDPA.
         The second tensor is garbage when `use_segmented_softmax_attn` is True.
 
     Restrictions:
@@ -177,7 +183,7 @@ def llama_sdpa_switch(q: torch.Tensor,
 
     has_attn_mask = attention_mask is not None
     if use_segmented_softmax_attn:
-        # Reconstruct normal mask from collapsed 3d article attention mask, adding causal mask if needed.
+        # Reconstruct normal mask from collapsed 3D article attention mask, adding causal mask if needed.
         if key_transposed:  # air.SDPA transposes key inside
             k = k.transpose(2, 3)
         if type(attention_mask) is tuple and len(attention_mask) == 2:
@@ -189,7 +195,7 @@ def llama_sdpa_switch(q: torch.Tensor,
             bs, n_heads, q_ss = q.shape[:3]
             kv_ss = k.shape[2]
             assert attention_mask.shape[-1] == kv_ss and attention_mask.shape[-2] == q_ss, \
-                f"Last two dimension of attention_mask should be q_seq_length and kv_seq_length. The mask has shape {attention_mask.shape} and expected last two dimensions is {(q_ss, kv_ss)}."
+                f"Last two dimensions of attention_mask should be q_seq_length and kv_seq_length. The mask has shape {attention_mask.shape} and expected last two dimensions is {(q_ss, kv_ss)}."
             if len(attention_mask.shape) == 3:  # (mask_bs, q_ss, kv_ss)
                 attention_mask = torch.unsqueeze(attention_mask, 1)
 
@@ -201,7 +207,7 @@ def llama_sdpa_switch(q: torch.Tensor,
                 attention_mask = upper_triangular_fill(attention_mask, MASK_MIN_VALUE, mixedp_attn)
                 is_causal = False
 
-        assert not (is_causal and has_attn_mask), "is_causal and attention mask are mutually exclusive in sdpa."
+        assert not (is_causal and has_attn_mask), "is_causal and attention mask are mutually exclusive in SDPA."
 
         with sdpa_directives({
                 'sdp_mixed_p': mixedp_attn,
@@ -221,7 +227,7 @@ def llama_sdpa_switch(q: torch.Tensor,
 
 
 def sn_llama_rms_norm_forward(self, hidden_states):
-    # [SambaNova] instead of forcing to float32, we use the auto mixed precision
+    # [SambaNova] instead of forcing to float32, we use mixed precision
     # hidden_states = hidden_states.to(torch.float32)
     if hasattr(self, 'config'):
         # in-memory patch overwrites config only, does not have fp32_ln in self
@@ -235,28 +241,18 @@ def sn_llama_rms_norm_forward(self, hidden_states):
     return self.weight * hidden_states
 
 
-def sn_llama_rotary_embedding_init(self: 'LlamaRotaryEmbedding', dim,
-                                   max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-    """
-    [SambaNova] This modified init method skips creating the cos_cached and sin_cached buffers. These are instead
-                created in custom separate patches for the specific sub-classes of Llama
-    """
-    # It is necessary to initiliaze the torch nn module here instead of using super() because LlamaLinearScalingRotaryEmbedding()
-    # and LlamaDynamicNTKScalingRotaryEmbedding() inits also are patched by this function.
-    torch.nn.Module.__init__(self)
-    self.scaling_factor = scaling_factor
-    self.dim = dim
-    self.max_position_embeddings = max_position_embeddings
-    self.base = base
-    inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-    self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    # [SambaNova] Initialize cos_cached and sin_cached. The _set_cos_sin_cache method is added and is polymorphic on
-    #             the rotary embedding variant.
-    self._set_cos_sin_cache(seq_len=max_position_embeddings,
-                            device=self.inv_freq.device,
-                            dtype=torch.get_default_dtype())
-
+def sn_patch_llama_rotary_embedding_init_cos_sin_cache(self: 'LlamaRotaryEmbedding',
+        dim,
+        max_position_embeddings,
+        base,
+        device,
+        scaling_factor,
+        rope_type,
+        config
+    ):
+     self._set_cos_sin_cache(seq_len=max_position_embeddings,
+                                device=self.inv_freq.device,
+                                dtype=torch.get_default_dtype())
 
 def sn_patch_llama_rotary_embedding_set_cos_sin_cache(self: 'LlamaRotaryEmbedding', seq_len, device, dtype):
     self.max_seq_len_cached = seq_len
@@ -265,12 +261,16 @@ def sn_patch_llama_rotary_embedding_set_cos_sin_cache(self: 'LlamaRotaryEmbeddin
     freqs = torch.einsum("i,j->ij", t, self.inv_freq)
     # Different from paper, but it uses a different permutation in order to obtain the same calculation
     emb = torch.cat((freqs, freqs), dim=-1)
-    self.register_buffer("_cos_cached", emb.cos().to(dtype), persistent=False)
-    self.register_buffer("_sin_cached", emb.sin().to(dtype), persistent=False)
+    # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+    self.register_buffer("_cos_cached", self.attention_scaling * emb.cos().to(dtype), persistent=False)
+    self.register_buffer("_sin_cached", self.attention_scaling * emb.sin().to(dtype), persistent=False)
 
 
-def sn_llama_rotary_embedding_forward(self, x, seq_len=None):
+def sn_llama_rotary_embedding_forward(self, x, position_ids, seq_len=None):
     # x: [bs, num_attention_heads, seq_len, head_size]
+    if "dynamic" in self.rope_type:
+        self._dynamic_frequency_update(position_ids, device=x.device)
+
     if seq_len > self.max_seq_len_cached:
         self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
@@ -292,38 +292,6 @@ def sn_llama_rotary_embedding_forward(self, x, seq_len=None):
     )
 
 
-def sn_patch_llama_linear_scaling_rotary_embedding_set_cos_sin_cache(self: 'LlamaLinearScalingRotaryEmbedding',
-                                                                     seq_len, device, dtype):
-    self.max_seq_len_cached = seq_len
-    t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-    t = t / self.scaling_factor
-
-    freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-    # Different from paper, but it uses a different permutation in order to obtain the same calculation
-    emb = torch.cat((freqs, freqs), dim=-1)
-    self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-    self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
-
-
-def sn_patch_llama_dynamic_ntk_scaling_rotary_embedding_set_cos_sin_cache(self: 'LlamaDynamicNTKScalingRotaryEmbedding',
-                                                                          seq_len, device, dtype):
-    self.max_seq_len_cached = seq_len
-
-    if seq_len > self.max_position_embeddings:
-        base = self.base * ((self.scaling_factor * seq_len / self.max_position_embeddings) -
-                            (self.scaling_factor - 1)) ** (self.dim / (self.dim - 2))
-        inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-
-    freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-    # Different from paper, but it uses a different permutation in order to obtain the same calculation
-    emb = torch.cat((freqs, freqs), dim=-1)
-    self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-    self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -339,7 +307,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 def sn_llama_attention_forward(
         self,
         hidden_states: torch.Tensor,
-        # [SambaNova] attention mask can be a tuple to represent 3D on-chip mask gen
+        # [SambaNova] attention mask can be a tuple to represent 3D on-chip mask generation
         attention_mask: Optional[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -375,8 +343,8 @@ def sn_llama_attention_forward(
             key_states_padded, value_states_padded = key_states, value_states
             if self.config.max_seq_length is not None and q_len < self.config.max_seq_length:
                 shape = (bsz, self.num_key_value_heads, self.config.max_seq_length - q_len, self.head_dim)
-                zero_padding = torch.zeros(shape, dtype=key_states.dtype)
-                zero_padding = GlobalNamedTensor.convert(zero_padding, f'zero_padding_{shape}')
+                zero_padding = tensor_cache.get_or_create_zeroes(key=f'zero_padding_{shape}', shape=shape,
+                                                                 dtype=key_states.dtype)
                 key_states_padded = torch.cat((key_states, zero_padding), dim=2)
                 value_states_padded = torch.cat((value_states, zero_padding), dim=2)
             past_key_value = (key_states_padded, value_states_padded)
@@ -431,8 +399,8 @@ def sn_llama_decoder_layer_forward(
         attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
             `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-            returned tensors for more detail.
+            Whether or not to return the attention tensors of all attention layers. See `attentions` under
+            returned tensors for detail.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
             (see `past_key_values`).
@@ -511,11 +479,11 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length):
+def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length, consume_cache):
     # create causal mask
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
     combined_attention_mask = None
-    if input_shape[-1] > 1:
+    if not consume_cache:
         combined_attention_mask = _make_causal_mask(
             input_shape,
             inputs_embeds.dtype,
@@ -561,7 +529,7 @@ def sn_llama_model_forward(
     # [SambaNova] Sanity check the attention mask.
     if self.training:
         assert not use_cache, "Please set the model to eval to do cached inference"
-        err_msg = 'Attention Mask must be a pair (article attention) or None (on-chip mask gen) during training'
+        err_msg = 'Attention mask must be a pair (article attention) or None (on-chip mask gen) during training'
         assert attention_mask is None or isinstance(attention_mask, tuple), err_msg
 
     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -581,14 +549,12 @@ def sn_llama_model_forward(
         batch_size, seq_length, _ = inputs_embeds.shape
     else:
         raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-    if consume_cache and seq_length > 1:
-        raise ValueError("Cached inference on cached calls only accepts sequence length of 1")
 
     past_key_values_length = 0
     if past_key_values is not None:
         past_key_values_length = past_key_values[0][0].shape[2]
         assert past_key_values_length == self.config.max_seq_length, \
-                f"max_seq_length must ({self.config.max_seq_length}) equal the length of past_key_value input ({past_key_values_length}) in token_gen graph"
+                f"max_seq_length must ({self.config.max_seq_length}) equal to the length of past_key_value input ({past_key_values_length}) in token_gen graph"
 
 
     with self.hyperfunction.embedding(seq_length, consume_cache, self.training):
@@ -601,6 +567,7 @@ def sn_llama_model_forward(
             inputs_embeds = self.embed_tokens(input_ids)
         # FIXME: why the condition ?
         # [SambaNova] Only populate mask in either cached inference token-by-token generation or
+        # TODO: or what?
         if consume_cache:
             # embed positions
             if attention_mask is None:
@@ -608,21 +575,25 @@ def sn_llama_model_forward(
                 attention_mask = torch.ones((batch_size, seq_length), dtype=torch.bool, device=inputs_embeds.device)
             if not isinstance(attention_mask, tuple):
                 attention_mask = _prepare_decoder_attention_mask(attention_mask, (batch_size, seq_length),
-                                                                 inputs_embeds, past_key_values_length)
+                                                                 inputs_embeds, past_key_values_length, consume_cache)
         hidden_states = inputs_embeds
 
-        # [SambaNova] For cached inference, 1) cache_gen graph, seq_len needs to be the same as input_ids length. 2)
+        # [SambaNova] For cached inference, 1) cache_gen graph and seq_len need to be the same as input_ids length. 2)
         # token_gen graph, seq_len is the past_key_values_length. For training, seq_len is the same as iput_ids length.
-        cos, sin = self.rotary_emb(hidden_states, seq_len=max(seq_length, past_key_values_length))
+        seq_len = max(seq_length, past_key_values_length)
+        cos, sin = tensor_cache.get_or_create_tuple(
+            f"{seq_len}_cos_sin_tensors",
+            lambda: self.rotary_emb(hidden_states, position_ids, seq_len=seq_len)
+        )
         cos, sin = get_cos_sin_cache(cos, sin, position_ids)
 
         # [SambaNova] In terms of compute graph, the float cast on inputs_embeds is redundant to the float cast within
         # the first decoder forward call where the input hidden_states, which is inputs_embeds here, is cast to float
-        # again. This redundant cast is to ensure O1 plugin heuristics's hyperfunction works for the first decoder.
-        # Hyperfunction needs the inputs's metadata (includeing dtype) to be the same across layers to work. Without this
-        # cast, the first decoder layer's hidden state input may look like bfloat16 while the rest decoder will always
-        # have float. This will cause we compile a different hyperfunction for the first decoder layer which doubles the
-        # compilation time and also the doubles the amount of work in heuristics design.
+        # again. This redundant cast is to ensure o1 plugin heuristics's hyperfunctions work for the first decoder.
+        # Hyperfunctions require that the input metadata (includeing dtype) are the same across layers. Without this
+        # cast, the first decoder layer's hidden state input may look like bfloat16 while the other decoder will always
+        # be float. As a result, we might compile a different hyperfunction for the first decoder layer, doubling
+        # compilation time and the amount of work in heuristics design.
         if self.config.fp32_skip_add:
             hidden_states = hidden_states.float()
 
@@ -684,8 +655,8 @@ def sn_llama_model_forward(
             all_self_attns += (layer_outputs[1], )
 
     with self.hyperfunction.classifier(seq_length, consume_cache, self.training):
-        # [SambaNova] Gather cannot be tiled along the gathering dimension
-        # having this at the beginning of the classifier section allow the rest
+        # [SambaNova] Gather cannot be tiled along the gathering dimension.
+        # Having this at the beginning of the classifier section allows the rest
         # of the classifier be pipelined without materalizing the full tensor
         if last_token_index is not None and hidden_states.shape[1] > 1:
             hidden_states = get_sliced_hidden_states(hidden_states, last_token_index)
@@ -709,6 +680,7 @@ def sn_llama_model_forward(
     )
 
 
+# TODO: the doc string for  sn_llama_for_causal_lm_forward is not complete.
 def sn_llama_for_causal_lm_forward(
         self: 'SNLlamaForCausalLM',
         input_ids: torch.LongTensor = None,
@@ -728,7 +700,7 @@ def sn_llama_for_causal_lm_forward(
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            (masked), the loss is computed only for the tokens with labels in `[0, ..., config.vocab_size]`.
 
     Returns:
 
@@ -780,10 +752,10 @@ def sn_llama_for_causal_lm_forward(
 
         loss = None
         if labels is not None:
-            # [SambaNova] slicing is not efficient on RDU. We expect the label is the same as input_ids. And user need
+            # [SambaNova] slicing is not efficient on RDU. We expect the label to be the same as input_ids. Users need
             # to use external loss gradient calculation inside the application to disable the backward pass on the label
-            # of first token of each article. The loss gradient is the tensor you need to pass to backward graph to
-            # start backpropagation.
+            # of the first token of each article. The loss gradient is the tensor you need to pass to the backward graph
+            # to start backpropagation.
 
             # Shift so that tokens < n predict n
             # shift_logits = logits[..., :-1, :].contiguous()

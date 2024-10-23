@@ -47,7 +47,10 @@ class GemmaConfigValidator(SNConfigValidatorPlugin):
 
 class GemmaModelLoaderPlugin(ModelLoaderPlugin):
     def get_automodel_map(self) -> Dict[Type[PreTrainedModel], _BaseAutoModelClass]:
-        return {SNGemmaModel: AutoModel, SNGemmaForCausalLM: AutoModelForCausalLM}
+        return {
+            SNGemmaModel: AutoModel,
+            SNGemmaForCausalLM: AutoModelForCausalLM
+        }
 
     def get_config_type(self) -> Type[SNPretrainedConfig]:
         return SNGemmaConfig

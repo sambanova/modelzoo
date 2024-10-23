@@ -25,7 +25,10 @@ def save_as_huggingface_checkpoint(model: PreTrainedModel, checkpoint: Checkpoin
     """Save a traced samba model to a huggingface checkpoint"""
 
     # Copy tensor data from RDU to host
-    samba.session.to_cpu(model)
+    try:
+        samba.session.to_cpu(model)
+    except AttributeError:
+        pass # This is a model that was run on cpu
 
     # Convert SambaTensors to Torch tensors
     torch_sd = {}

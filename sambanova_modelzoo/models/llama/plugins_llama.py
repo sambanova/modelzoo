@@ -42,7 +42,7 @@ class LlamaConfigurationTransformer(ConfigurationTransformerPlugin):
 
 
 class LlamaConfigValidator(SNConfigValidatorPlugin):
-    def get_config_type(self) -> Type[PretrainedConfig]:
+    def get_config_type(self) -> Type[SNPretrainedConfig]:
         return SNLlamaConfig
 
 
@@ -53,7 +53,7 @@ class LlamaModelLoaderPlugin(ModelLoaderPlugin):
             SNLlamaForCausalLM: AutoModelForCausalLM,
         }
 
-    def get_config_type(self) -> SNLlamaConfig:
+    def get_config_type(self) -> Type[SNPretrainedConfig]:
         return SNLlamaConfig
 
 

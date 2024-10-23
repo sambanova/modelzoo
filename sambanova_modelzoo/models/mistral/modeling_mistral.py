@@ -1,4 +1,6 @@
+# coding=utf-8
 # Modifications Copyright 2024 by SambaNova Systems, Inc. All rights reserved.
+
 # Copyright 2023 Mistral AI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -33,7 +35,7 @@ from sambanova_modelzoo.models.custom_ops import create_3d_attn_mask, sliding_wi
 from sambanova_modelzoo.models.mistral.heuristics.hyperfunction_mistral import MistralHyperfunction
 from sambanova_modelzoo.models.modeling_patch_utils import MASK_MIN_VALUE, finfo_float32_min_patch, sn_patch_lazy_init_weights
 from sambanova_modelzoo.models.modeling_utils import (apply_rotary_pos_emb, get_cos_sin_cache, get_position_ids,
-                                     get_sliced_hidden_states, update_kv_cache, GlobalNamedTensor)
+                                     get_sliced_hidden_states, update_kv_cache)
 from sambanova_modelzoo.models.patch_router import (
     sn_patch_not_supported,
     sn_patch_post_process_self,
@@ -54,7 +56,7 @@ from transformers.utils import (add_start_docstrings, add_start_docstrings_to_mo
                                 replace_return_docstrings, is_flash_attn_2_available)
 
 from .configuration_mistral import SNMistralConfig
-from .patch_mistral import (sn_mistral_rms_norm_forward, 
+from .patch_mistral import (sn_mistral_mlp_forward, sn_mistral_rms_norm_forward, 
                             _sn_mistral_set_cos_sin_cache, 
                             sn_mistral_rotary_embedding_forward, sn_mistral_attention_forward, sn_mistral_decoder_forward, sn_mistral_model_forward, sn_mistral_for_causallm_forward, sn_mistral_model_self)
 
@@ -191,7 +193,11 @@ class MistralMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-
+    
+    @sn_patch_replace(
+        patch=sn_mistral_mlp_forward,
+        description="To annotate OpFusion ID."
+    )
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 

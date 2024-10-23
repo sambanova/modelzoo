@@ -22,7 +22,6 @@ This file demonstrates how to do the following in a RDU environment:
   3. Train an LLM
         - without using HF trainer
   4. Save a checkpoint
-
 It is for demonstrative purposes only and not intended to be used for real training.
 It follows the same structure as and shares much of its code with cpu_train_llm.py
 """
@@ -54,6 +53,7 @@ from sambaflow import samba
 from sambaflow.samba import SambaTensor
 from sambaflow.samba.utils import trace_graph, get_rank, get_world_size, is_main_process
 from sambaflow.samba.utils import set_seed as set_samba_seed
+from sambaflow.samba.utils.checkpoint import load_sharded_checkpoint
 from sambaflow.samba.utils.pef_utils import get_pefmeta_dict
 
 
@@ -70,16 +70,9 @@ def load_model(checkpoint: CheckpointConfig, model_arch: PretrainedModelConfig) 
     modelzoo_params = model_arch.model_dump()
     config = ConfigurationTransformer().run(config, sn_model_args=modelzoo_params)
 
-    # Load model from the config to randomly initialize weights (pretraining) or
-    # Load model from checkpoint to load weights from disk (finetuning)
-    if checkpoint.config_name:
-        model = AutoModelForCausalLM.from_config(config, torch_dtype=model_arch.dtype)
-    elif checkpoint.model_name_or_path:
-        model = AutoModelForCausalLM.from_pretrained(checkpoint.model_name_or_path,
-                                                     config=config,
-                                                     torch_dtype=model_arch.dtype)
-    else:
-        raise ValueError('checkpoint.config_name or checkpoint.model_name_or_path not provided')
+    # Load model from the config. If pretraining, randomly initialized weights will be transferred to the RDU. If
+    # finetuning from a checkpoint on disk, load the weights to RDU after tracing.
+    model = AutoModelForCausalLM.from_config(config, torch_dtype=model_arch.dtype)
 
     return model
 
@@ -177,16 +170,16 @@ def main(cfg: RDUTrainingConfig):
     # Set the seed for reproducibility between runs or workers
     set_seed(cfg.training.seed)
     set_samba_seed(cfg.training.seed)
-    
+
     print('Loading model...')
-    # Don't load weights in RAM if compiling
-    loading_context = init_empty_weights if cfg.command == 'compile' else nullcontext
-    with loading_context():
+    # Load the model for tracing without materializing the weights.
+    with init_empty_weights():
         model = load_model(cfg.checkpoint, cfg.model)
     samba.from_torch_model_(model)  # important! Move model to samba runtime
 
     print('Loading optimizer...')
     import sambaflow.samba.optim as optim  # important! Load the optimizer from samba instead
+    # if model params are empty/meta tensors, the optim state tensors will also be empty/meta tensors
     optimizer = optim.AdamW(model.parameters(), lr=cfg.training.learning_rate)
 
     # NOTE: In the base model source from huggingface, the model computes the loss
@@ -227,12 +220,36 @@ def main(cfg: RDUTrainingConfig):
         # Model weights are already loaded and moved with `samba.from_torch_model_`.
         # trace_graph returns the output from fwd + backwd, optim
         print('Tracing...')
+        # transfer_device=False so that tensor data is not automatically transferred from CPU to RDU. If pretraining,
+        # weight data will be initialized and transferred to RDU later, and if finetuning, weight data will be loaded
+        # from a checkpoint directly onto the RDU through load_sharded_checkpoint
         model_outputs = trace_graph(model,
                                     tracing_inputs,
                                     optimizer,
                                     pef=cfg.samba_run.pef,
                                     loss_indices=[0],
-                                    data_parallel_mode='normal')
+                                    data_parallel_mode='normal',
+                                    transfer_device=False)
+        if cfg.checkpoint.model_name_or_path is not None:
+            print('Transferring tensors that have data...')
+            traced_tensors_with_data = [t for t in samba.session._traced_tensors() if t.has_data]
+            for t in traced_tensors_with_data:
+                t.rdu()
+
+            print('Materializing optimizer tensors onto the RDU...')
+            for optim_tensor in samba.session.optim_dict.values():
+                optim_tensor.rdu()
+
+            # load checkpoint directly onto the RDU without keeping a copy of the data on the host, in order to avoid
+            # OOM
+            print('Loading sharded checkpoint...')
+            load_sharded_checkpoint(model, cfg.checkpoint.model_name_or_path, ignore_dtype_mismatch=True)
+        else:
+            print('Reinitializing model and transferring weights to RDU...')
+            # need to reinitialize model to replace meta tensors with proper values
+            model = load_model(cfg.checkpoint, cfg.model)
+            samba.from_torch_model_(model)
+            samba.session.to_device()
     else:
         raise ValueError('Only compile and run commands are supported')
 
@@ -244,7 +261,7 @@ def main(cfg: RDUTrainingConfig):
 
     # Keep track of per step metrics for reporting
     tokens_per_step = []
-    time_per_step = []  # TODO: Use after Andy's profiling PR
+    time_per_step = []
     loss_per_step = []
     lr_per_step = []
 
@@ -253,8 +270,13 @@ def main(cfg: RDUTrainingConfig):
     # The input tensors need to match their unique names at runtime.
     samba_tensor_names = SambaPretrainInputNames()
 
+    break_training = False
+
     start_train_time = time.time()
-    for epoch in range(cfg.training.num_epochs):        
+    for epoch in range(cfg.training.num_epochs):
+        if break_training:
+            break
+
         print(f'Loading dataset for epoch {epoch + 1}...')
         dataloader = load_dataset(cfg.training, cfg.model.max_seq_length)
         num_batches = len(dataloader)
@@ -317,7 +339,12 @@ def main(cfg: RDUTrainingConfig):
                 lr_per_step.append(cfg.training.learning_rate)
                 time_per_step.append(end_step_time - start_step_time)
 
+            if i+1 == cfg.training.end_early_at_step:
+                break_training = True
+                break
+
         total_train_time = (time.time() - start_train_time)
+
         # Evaluate loss/perplexity on the dev set
         if is_main_process() and cfg.training.evaluate:
             print('Running evaluation...')
@@ -352,13 +379,16 @@ def main(cfg: RDUTrainingConfig):
         print(f'Checkpoint saved at {cfg.training.output_dir}/')
 
         print('Saving summary...')
+        total_tokens_seen = f'Total tokens seen: {sum(tokens_per_step)}\n'
+        tokens_per_second = f'Tokens per second: {(sum(tokens_per_step) / total_train_time):.4f}\n' if total_train_time else ""
+        average_time_per_step = f'Average time per step: {(sum(time_per_step) / len(time_per_step)):.4f}s' if time_per_step else ""
         mz_params_header = "\nThe following are the model params used to train this model using Model Zoo:\n"
-        summary_text = training_overview + (
-                f'Total tokens seen: {sum(tokens_per_step)}\n'
-                f'Tokens per second: {(sum(tokens_per_step) / total_train_time):.4f}\n'
-                f'Average time per step: {(sum(time_per_step) / len(time_per_step)):.4f}s'
-        )
+
+        # Create a summary report with the training metrics
+        summary_text = training_overview + total_tokens_seen + tokens_per_second + average_time_per_step
+        # Add model params to the report
         summary_text += mz_params_header + cfg.model.model_dump_json()
+
         save_summary_report(cfg.training.output_dir, 'summary.txt', summary_text)
         print(f'Summary saved at {cfg.training.output_dir}/summary.txt')
 

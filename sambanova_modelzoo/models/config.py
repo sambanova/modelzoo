@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, Optional, Set, Tuple, Type, Union, cast
 
 from transformers import PretrainedConfig
 
@@ -28,10 +29,12 @@ class SNPretrainedConfig(ABC):
             fp32_ln: bool = False,
             fp32_skip_add: bool = False,
             lazy_init: bool = False,
+            run_early_tp: bool = False,
             use_plugin_heuristics: bool = False,
             use_segmented_softmax_attn: bool = False,
             seg_softmax_block_size: Optional[int] = None,
             max_seq_length: Optional[int] = None,
+            max_tokens_to_generate: Optional[int] = None,
     ):
         """
         SambaNova pretrained config
@@ -48,17 +51,21 @@ class SNPretrainedConfig(ABC):
                            It also uses the multithreaded random library to speed up initialization.
                            When used with Samba frontends, it will also stream the weight device transfer without
                            materializing the whole model.
-                use_plugin_heuristics: Whether to use O1 HD heuristics for customized mapping
-                use_segmented_softmax_attn: Use SDPA flashattention on RDU, to be deprecated by _attn_implementation
+                run_early_tp:  If true, distribute computation across multiple sockets early in compilation.
+                use_plugin_heuristics: If true, use o1 HD heuristics for customized mapping.
+                use_segmented_softmax_attn: If true, use SDPA on RDU. To be deprecated 
                                             after torch 2.0 upgrade
-                seg_softmax_block_size: Force a key-value block size in segmented softmax attention (flash attention)
+                seg_softmax_block_size: If set, force a key-value block size in segmented softmax attention
                                         in SDPA.
-                max_seq_length: The sequence length of the KV cache used by token generation graph. It is the maximum
+                max_seq_length: The sequence length of the KV cache used by the token generation graph. It is the maximum
                                 number of tokens one can generate including the input prompts.
                                 1. For the cache generation graph, if the sequence length of input_ids is smaller than
                                 max_seq_length, the KV cache will be zero padded to the max_seq_length so that it can
-                                be used for token generation graph.
+                                be used for the token generation graph.
                                 2. For the token generation graph, max_seq_length equals the KV cache's sequence length.
+                max_tokens_to_generate: The maximum number of tokens to generate. In the case of spec decoding, the token gen graph will
+                                        only generate K tokens therefore to reduce the cost of transferring the result to host the 
+                                        generated_tokens tensor will have a max size of BSxK.
         """
         # Precision controls
         self.mixedp_attn = mixedp_attn
@@ -78,6 +85,17 @@ class SNPretrainedConfig(ABC):
 
         # For O1HD
         self.use_plugin_heuristics = use_plugin_heuristics
+        self.run_early_tp = run_early_tp
+
+        # For Spec Decoding
+        if max_tokens_to_generate is not None and max_seq_length is not None:
+            assert (max_tokens_to_generate <= max_seq_length and max_tokens_to_generate > 0), (
+                    "max_tokens_to_generate must be less than or equal to max_seq_length, "
+                    "and it should be greater than 0, but got {} and {}, respectively.".format(
+                        max_tokens_to_generate, max_seq_length
+                    )
+                )
+        self.max_tokens_to_generate = max_tokens_to_generate
 
     @classmethod
     def create(cls,
@@ -88,11 +106,11 @@ class SNPretrainedConfig(ABC):
                ) -> Union[PretrainedConfig, 'SNPretrainedConfig']:
         """
         Args:
-            sn_args: These are the specific arguments for this cls SNPretrainedConfig subclass. These take precedence.
-            original_config: This should be an instance of the specific model class's HF config.
+            sn_args: Specific arguments for this SNPretrainedConfig subclass. These take precedence.
+            original_config: An instance of the specific model class's Hugging Face config.
             original_config_overrides: This will be applied to the original_config to override the specific values.
         Returns:
-            An SNPretrainedConfig subclass converted from original_config.
+            An SNPretrainedConfig subclass converted from the original_config.
         """
         uber_dict = {}
         for d in [original_config.to_dict(), original_config_overrides, sn_args]:
@@ -104,17 +122,18 @@ class SNPretrainedConfig(ABC):
     @classmethod
     def get_model_type_id(cls) -> str:
         """
-        Returns: the type-string for the model to associate with the config class, e.g. 'snllama',
+        Returns: the type string to associate with the config class for the model, e.g. 'snllama',
         """
         if cls.model_type == "" and (cls is not SNPretrainedConfig):
-            raise NotImplementedError("Expected subclass of SNPretrainedConfig to have model_type defined in class.")
+            raise NotImplementedError(f'A subclass of SNPretrainedConfig [{cls}] must have the '
+                                      f'\'model_type\' class variable defined.')
 
         return cls.model_type
 
     def update_from_config(self, config: PretrainedConfig):
         """
         Args:
-            config: a subclass of PretrainedConfig object used to update the SambaNova PretrainedConfig subclass
+            config: a subclass of the PretrainedConfig object used to update the SambaNova PretrainedConfig subclass
         """
         self.update(config.to_dict())
 
@@ -134,10 +153,12 @@ class SNPretrainedConfig(ABC):
         Args:
             provided_args: the args to split into SNPretrainedConfig args and non-SNPretrainedConfig args.
 
-        Returns: (sn_args, non_sn_args) tuple of two Dict[str, Any]
+        Returns: (sn_args, non_sn_args) tuple of two Dict[str, Any] with model_type removed
         """
         sn_args = SNPretrainedConfig.get_sn_args(provided_args)
-        non_sn_args = {k: v for k, v in provided_args.items() if k not in sn_args}
+        # Note that we must remove model_type, since providing it from provided_args will shadow the
+        # SNPretrained subclass' class-variable with an instance variable that will be the HF model_type
+        non_sn_args = {k: v for k, v in provided_args.items() if k not in sn_args and k != 'model_type'}
 
         return sn_args, non_sn_args
 
@@ -145,7 +166,7 @@ class SNPretrainedConfig(ABC):
     def get_sn_args(cls, provided_args: Dict[str, Any], exclude_args: Optional[Set[str]] = None) -> Dict[str, Any]:
         """
         Get the arguments from provided_args that are also constructor arguments for the specific implementing subclass.
-        'self' and 'kwargs' are always excluded, as well as all arguments specified in the exclude_args set.
+        'self', 'kwargs', and all arguments specified in the exclude_args set are always excluded.
 
         Note: !! __init__ must not contain *args else TypeError is raised.
 
@@ -188,7 +209,6 @@ class SNPretrainedConfig(ABC):
             Returns:
                 The map of arg: <string representation> for the constructor of specific_class.
             """
-            import inspect
             return {arg: str(param) for (arg, param) in inspect.signature(specific_class.__init__).parameters.items()}
 
         baseclass = SNPretrainedConfig
@@ -197,13 +217,13 @@ class SNPretrainedConfig(ABC):
         baseclass_args = get_argument_map(baseclass)
 
         # Prevent subclasses with *args for now, there does not seem to be a
-        # meaningful use-case for *args in SNPretrainedConfig subclasses.
+        # meaningful use case for *args in SNPretrainedConfig subclasses.
         if '*args' in subclass_args.values():
             raise TypeError(f'The constructor of {cls.__name__} must either:'
                             f' not be overloaded, or have a specific argument list + kwargs. Must not have *args.')
 
         # Matches the arguments in the constructor, including types and defaults that
-        #  we do not want to expose as subclass SN model patch parameters.
+        # we do not want to expose as subclass SN model patch parameters.
         always_excluded = {
             'self',
             '**kwargs',
@@ -215,3 +235,35 @@ class SNPretrainedConfig(ABC):
         filtered_subclass_args = {key for (key, value) in subclass_args.items() if value not in excluded_params}
         all_arg_names = filtered_baseclass_args.union(filtered_subclass_args)
         return all_arg_names
+
+    def get_hf_config_subset(self) -> PretrainedConfig:
+        """
+        This function retrieves the hugging face (PretrainedConfig subset ) configuration from the SNPretrainedConfig,
+        that is, only parameters defined in PretrainedConfig or its direct subclasses. Note that this may be different
+        from the config that was used to create the SN configuration, since SN configuration may override
+        properties defined in the PretrainedConfig.
+
+        The 'architectures' and 'model_type' are modified since that is unavoidable, these should be "reverted" before
+        serializing the config.
+
+        But, other properties may also be modified due to not being compatible otherwise. It is important that
+        these are serialized.
+
+        Returns:
+            PretrainedConfig: The "source" hugging face configuration.
+        Raises:
+            TypeError if this class is not in some way a subclass of PretrainedConfig
+        """
+        def get_pretrained_config_class():
+            for base in self.__class__.__bases__:
+                if issubclass(base, PretrainedConfig):
+                    return base
+            raise TypeError(f'Expected this class {self.__class__.__name__} to be subclass of PretrainedConfig.')
+
+        pretrained_config_class = get_pretrained_config_class()
+        combined_sn_args = self.get_combined_sn_arg_names()
+        config_items = cast(PretrainedConfig, self).to_dict().items()  # includes all the config elements, also sn ones
+
+        source_config_dict = {k: v for k, v in config_items if k not in combined_sn_args}
+
+        return pretrained_config_class(**source_config_dict)

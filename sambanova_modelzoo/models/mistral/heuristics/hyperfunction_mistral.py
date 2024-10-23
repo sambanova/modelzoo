@@ -58,9 +58,9 @@ class MistralHyperfunction(HyperfunctionForCausalLM):
         """
         if self.config.use_segmented_softmax_attn:
             heuristic = {
-                "distribution": "MISTRAL_7B_ENCODER_SEG_SOFTMAX",
-                "tiling": "MISTRAL_7B_ENCODER_SEG_SOFTMAX",
-                "mapping": "MISTRAL_7B_ENCODER_SEG_SOFTMAX"
+                "distribution": "kMistral_7B_Sdpa_Encoder",
+                "tiling": "kLlama3_8B_Sdpa_Encoder",
+                "mapping": "kMistral_7B_Sdpa_Encoder"
             }
         else:
             heuristic = {
@@ -79,7 +79,10 @@ class MistralHyperfunction(HyperfunctionForCausalLM):
                 self.config.architectures[0].lower() if self.config.architectures else "snmistralforcausallm",
                 "consume_cache": consume_cache,
             },
-            plugins=["libMistralEncoderDistribution.so", "libMistralEncoderTiling.so", "libMistralEncoderMapping.so"],
+            plugins=[
+                "libLlama3SdpaEncoderHook.so", "libMistralEncoderDistribution.so", "libMistralEncoderTiling.so",
+                "libMistralEncoderMapping.so"
+            ],
             reuse_last_id=reuse_last_id,
             user_annotated=self.config.use_plugin_heuristics)
 

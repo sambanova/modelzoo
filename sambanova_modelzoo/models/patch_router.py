@@ -75,7 +75,7 @@ def testing_disable_all_patches():
 
 
 class SNPatchMode(enum.Enum):
-    """Selection if multiple lambdas in a list of patches should be mutually exclusive or
+    """Specifies if multiple lambdas in a list of patches should be mutually exclusive or
        if the first one matching should win.
     """
     Exclusive = enum.auto()
@@ -86,13 +86,13 @@ def _get_argument_dictionary(signature: inspect.Signature,
                              args,
                              kwargs,
                              additional_arguments: typing.Dict[str, Any] = {}) -> DefaultDict[str, Any]:
-    """Put all arguments into a dictionary, including values for the default-value arguments bound in the
+    """Puts all arguments into a dictionary, including values for the default-value arguments bound in the
     supplied signature.
 
     Args:
         signature: The signature of the called function
-        args: The supplied args, must match args to a function matching the signature
-        kwargs: The supplied kwargs, must match kwargs to a function matching the signature
+        args: The supplied args. Must match args to a function that matches the signature
+        kwargs: The supplied kwargs, must match kwargs to a function that matches the signature
         additional_arguments: Additional arguments to put into the argument dictionary
 
     Returns:
@@ -114,7 +114,7 @@ def _check_condition(func: Optional[Callable[..., bool]], args: DefaultDict[str,
     """Check if this patch should be applied.
 
     Args:
-        func: An function to use to check the condition. If no functions is given, handle as always true.
+        func: A function to use to check the condition. If no functions is given, defaults to true.
         args: A default dictionary of all the arguments (including keyword arguments).
 
     Returns:
@@ -133,7 +133,7 @@ def _check_condition(func: Optional[Callable[..., bool]], args: DefaultDict[str,
 
 def _build_argument_list(func: Callable[..., Any],
                          args: DefaultDict[str, Any]) -> Tuple[typing.Dict[str, Any], typing.Dict[str, Any]]:
-    """Build dictionary that binds arguments for calling `func` from value mappings in `args`
+    """Build a dictionary that binds arguments for calling `func` from value mappings in `args`
 
     Args:
         func: The callable to build the arguments for
@@ -187,9 +187,9 @@ def sn_patch_not_supported(
         not_supported_if: Optional[Callable[..., bool]] = None,
         description: Optional[str] = None,
 ) -> Callable[[Callable[..., RetType]], Callable[..., RetType]]:
-    """Decorator that dynamically disables the decorated function if the `not_uspported_if` function returns true.
+    """Decorator that dynamically disables the decorated function if the `not_supported_if` function returns true.
 
-    The intended use-case is to handle cases where some dynamic configuration parameter indicates that
+    Useful to handle cases where a dynamic configuration parameter indicates that
     a function is not valid to call.
 
     The `not_supported_if` lambda can take any argument that is supplied to the decorated function,
@@ -197,10 +197,10 @@ def sn_patch_not_supported(
       all_args : The full set of arguments as a defaultdict with default value None.
           Sometimes useful to forward logic to another function.
       config : If the decorated function has a self argument, and that self argument has a config member, use this.
-          This is useful in many models where the class has a config variable containing relevant configuration that
-          is not passed as arguments to specific methods
+          This is useful in many models where the class has a config variable that contains configuration that
+          is not passed as an argument to specific methods.
 
-    Usage example:
+    Example:
     >>> from sambanova_modelzoo.models.patch_router import sn_patch_not_supported
     ...
     ... @sn_patch_not_supported(not_supported_if=lambda val: not (0 <= val <= 100),
@@ -214,7 +214,7 @@ def sn_patch_not_supported(
 
     Args:
         not_supported_if: The condition to use for checking if the decorated function should not be called
-        description: Non-functional argument used to place documentation in-place for what the patch does.
+        description: Non-functional argument for documentation for what the patch does.
 
     Returns:
         A decorator that dynamically throws a SNNotSupportedError if the condition is met
@@ -259,10 +259,10 @@ def sn_patch_class_not_supported(
     """Decorator that dynamically disables all methods in the decorated class if the `not_supported_if` function
     returns true or if no such guard is given.
 
-    The intended use-case is to handle cases where parts of a model are not supported yet, but we want to leave
+    Use this decorator to handle cases where parts of a model are not yet supported, but you want to leave
     those parts in the code to keep the changes minimal.
 
-    The `not_supported_if` lambda takes the decorated class as an argument
+    The `not_supported_if` lambda takes the decorated class as an argument.
 
     Usage example:
     >>> >>> from sambanova_modelzoo.models.patch_router import (SNNotSupportedError, sn_patch_class_not_supported)
@@ -278,7 +278,7 @@ def sn_patch_class_not_supported(
 
     Args:
         not_supported_if: The condition to use for checking if the decorated function should not be called
-        description: Non-functional argument used to place documentation in-place for what the patch does.
+        description: Non-functional argument for documentation for what the patch does
 
     Returns:
         A decorator that makes all methods in a class not supported
@@ -341,8 +341,8 @@ def sn_patch_pre_process_self(
       all_args : The full set of arguments as a defaultdict with default value None.
           Sometimes useful to forward logic to another function.
       config : If the decorated function has a self argument, and that self argument has a config member, use this.
-          This is useful in many models where the class has a config variable containing relevant configuration that
-          is not passed as arguments to specific methods
+          This is useful in many models where the class has a config variable that contains relevant configuration that
+          is not passed as an argument to specific methods.
 
     Usage example:
     >>> from typing import List, Optional
@@ -374,7 +374,7 @@ def sn_patch_pre_process_self(
         modification: The modifiation function to call
         enable_if: The condition to use for checking if `modification`should be applied. If none is given,
                   that corresponds to a patch that is always applied.
-        description: Non-functional argument used to place documentation in-place for what the patch does.
+        description: Non-functional argument for documentation for what the patch does.
 
     Returns:
         A decorator that optionally and dynamically modifies the self of the method it is applied to
@@ -435,8 +435,8 @@ def sn_patch_post_process_self(
       all_args : The full set of arguments as a defaultdict with default value None.
           Sometimes useful to forward logic to another function.
       config : If the decorated function has a self argument, and that self argument has a config member, use this.
-          This is useful in many models where the class has a config variable containing relevant configuration that
-          is not passed as arguments to specific methods
+          This is useful in many models where the class has a config variable that contains configuration that
+          is not passed as an argument to specific methods.
 
     Usage example:
     >>> from sambanova_modelzoo.models.patch_router import sn_patch_post_process_self
@@ -458,7 +458,7 @@ def sn_patch_post_process_self(
         modification: The modifiation function to call
         enable_if: The condition to use for checking if `modification`should be applied. If none is given,
                   that corresponds to a patch that is always applied.
-        description: Non-functional argument used to place documentation in-place for what the patch does.
+        description: Non-functional argument for documentation for what the patch does
 
     Returns:
         A decorator that optionally and dynamically modifies the self of the method it is applied to
@@ -521,8 +521,8 @@ def sn_patch_post_process_result(
       all_args : The full set of arguments as a defaultdict with default value None.
           Sometimes useful to forward logic to another function.
       config : If the decorated function has a self argument, and that self argument has a config member, use this.
-          This is useful in many models where the class has a config variable containing relevant configuration that
-          is not passed as arguments to specific methods
+          This is useful in many models where the class has a config variable that contains configuration that
+          is not passed as an argument to specific methods.
 
     Usage example:
     >>> from sambanova_modelzoo.models.patch_router import sn_patch_post_process_result
@@ -542,7 +542,7 @@ def sn_patch_post_process_result(
         modification: The modifiation function to call, taking result as the first argument
         enable_if: The condition to use for checking if `modification`should be applied. If none is given,
                   that corresponds to a patch that is always applied.
-        description: Non-functional argument used to place documentation in-place for what the patch does.
+        description: Non-functional argument for documentation for what the patch does.
 
     Returns:
         A decorator that optionally and dynamically modifies the arguments to the function it is applied to
@@ -600,8 +600,8 @@ def sn_patch_replace(
       all_args : The full set of arguments as a defaultdict with default value None.
           Sometimes useful to forward logic to another function.
       config : If the decorated function has a self argument, and that self argument has a config member, use this.
-          This is useful in many models where the class has a config variable containing relevant configuration that
-          is not passed as arguments to specific methods
+          This is useful in many models where the class has a config variable that contains configuration that
+          is not passed as an argument to specific methods.
 
     Works the same as :func:`sn_patches` with a single argument.
 
@@ -623,9 +623,9 @@ def sn_patch_replace(
 
     Args:
         patch: The replacement function to call instead
-        enable_if: The condition to use for checking if `patch`should be used. If none is given, that corresponds to
-                  a patch that is always applied.
-        description: Non-functional argument used to place documentation in-place for what the patch does.
+        enable_if: The condition to use for checking if `patch` should be used. If none is given, the
+                  patch is always applied.
+        description: Non-functional argument for documentation for what the patch does.
 
     Returns:
         A decorator that dynamically patches the function it is applied to
@@ -672,8 +672,8 @@ class SNPatch:
 
     Attributes:
         patch: The replacement function to call instead
-        enable_if: The condition to use for checking if `patch`should be used. If none is given, that corresponds to
-                  a patch that is always applied.
+        enable_if: The condition to use for checking if `patch` should be used. If none is given, the
+                  patch is always applied.
     """
     patch: Optional[Callable[..., RetType]]
     enable_if: Optional[Callable[..., bool]] = None
@@ -686,6 +686,7 @@ def _find_patch(patches: List[SNPatch], mode: SNPatchMode,
 
     Args:
         patches: The list of patches to
+        TODO: to ??
         mode: The mode to use for selecting the patch
         all_args: All the arguments in a dictionary
 
@@ -717,19 +718,19 @@ def sn_patch_replacements(
         mode: SNPatchMode = SNPatchMode.Exclusive,
         patches: List[SNPatch],
 ) -> Callable[[Callable[..., RetType]], Callable[..., RetType]]:
-    """Decorator factory for dynamically patching a function with some other function.
+    """Decorator factory for dynamically patching a function with another function.
 
-    The intended use-case is to handle cases where some dynamic configuration parameter indicates that a
-    different version of a function should be used. Note that for methods, self is included in the arguments
+    Use this decorator when a dynamic configuration parameter indicates that a different version
+    of a function should be used. For methods, self is included in the arguments
     and thus member variables of the class can be used as well in the dynamic checks.
 
     When one of the patches in the list returns true from the condition, the corresponding patch is used instead of the
-    decorated function. If the mode is `Exclusive` (default) only one of the patches is allowed to be active for
+    decorated function. If the mode is `Exclusive` (default) only one of the patches can be active for
     each call, so the list of patches must be mutually exclusive. If the mode is `FirstWins`, then the first patch
     (if any) that is true will be applied.
 
     The `enable_if` lambdas in the `patches` can take any argument that is supplied to the decorated function, but
-    does not need to take all of them. In addition, there are two argument names that have special meaning:
+    does not need to take all of them. Two argument names have special meaning:
       all_args : The full set of arguments as a defaultdict with default value None.
           Sometimes useful to forward logic to another function.
       config : If the decorated function has a self argument, and that self argument has a config member, use this.
@@ -768,7 +769,7 @@ def sn_patch_replacements(
 
     Args:
         patches (List[SNPatch]): The patches to check and potentially use
-        mode: The to use when checking which patch to apply
+        mode: The SNPatchMode to use when checking which patch to apply
 
     Returns:
         A decorator that dynamically patches the function it is applied to
@@ -798,8 +799,8 @@ def sn_patch_inline(enable_if: Callable[[], bool],
     """Decorator factory for conditionally applying a function directly at the definition site.
 
     In general, using an if-statement represents the same functionality with less magic. However, using
-    `sn_patch_inline` semantically marking the usages as different from normal if-statements, and can be easily
-    searched for similar to usages of `sn_patch` and `sn_patches` sincel all three share the prefix `sn_patch`.
+    `sn_patch_inline` semantically marks the condition as different from normal if-statements, and can be easily
+    searched for (similar to `sn_patch` and `sn_patches`) because all three share the prefix `sn_patch`.
 
     Usage example:
     >>> from sambanova_modelzoo.models.patch_router import sn_patch_inline

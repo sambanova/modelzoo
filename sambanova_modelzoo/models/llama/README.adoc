@@ -1,27 +1,27 @@
-= Llama-2 Model Card
+= Llama-2 model card
 
 Llama 2, developed by Meta, is "a collection of pretrained and fine-tuned generative text models ranging in scale from 7 billion to 70 billion parameters." This folder contains source code that adapts the model for running on RDU. 
 
-== Architecture Changes 
+== Architecture changes 
 
 Model Zoo models maintain checkpoint compatibility with Hugging Face, so there are no architecture differences. 
 
 * See  xref:patch_llama.py[] for details on how we've modified the model to run on RDU
 * See xref:../../examples/training/README.adoc[the training README] and the  xref:../../examples/text_generation/README.adoc[text generation README] for discussions of CPU/RDU differences. 
 
-== General Use Cases
+== General use cases
 
 See the link:https://huggingface.co/meta-llama/Llama-2-7b-chat-hf[Hugging Face Model Card]. SambaNova does not ship checkpoints for this model. Instead, you can use the Model Zoo model source with the corresponding Hugging Face checkpoint. 
 
-== Data Preparation
+== Data preparation
 
 Our models expect data in HDF5 format. See the SambaNova data preparation scripts in link:https://github.com/sambanova/generative_data_prep[this public GitHub repo]. 
 
-== Model Parameters and Configuration
+== Model parameters and configuration
 
 See link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] for a discussion of modification options and limitations.  
 
-== Supported Models
+== Supported models
 Model Zoo currently supports the following Llama-2 versions: 
 
 * Llama-2-7b
@@ -39,5 +39,19 @@ IMPORTANT: For Llama 70B, base configuration models you must use Tensor Parallel
 
 link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] lists the checkpoints that we have tested, but you can use other Hugging Face checkpoints for the corresponding model. 
 
+== Data parallel functionality
 
+Data-parallelism is a method where the dataset is split into several parts, and each part is processed at the same time by different replicas of the application.
 
+The following Llama models support 4-way data parallel functionality:
+
+* Llama-2-70b
+
+The following Llama models support 16-way data parallel functionality:
+
+* Llama-2-7b
+* Llama-2-13b
+
+NOTE: The 16-way Data Parallel (DP) enablement feature works fine with 4K sequence lengths. However, it has a risk of running out of memory for 8K and higher sequence lengths.
+
+See xref:developer::data-parallel.adoc#_what_is_data_parallel[What is data parallel] for more information.

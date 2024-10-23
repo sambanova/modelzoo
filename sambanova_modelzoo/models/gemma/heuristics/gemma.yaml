@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 qkv:
     priority: 4
     heuristic:
@@ -331,10 +330,6 @@ self_attn_proj:
             op_type: linear
             child: post_linear_cast
         post_linear_cast:
-            op_type: type_
-            required: false
-            child: add_49
-        add_input_cast:
             op_type: type_
             required: false
             child: add_49

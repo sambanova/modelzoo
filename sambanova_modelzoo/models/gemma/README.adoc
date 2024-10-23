@@ -1,29 +1,39 @@
-= Gemma Model Card
+= Gemma model card
 
 Gemma, is "a family of lightweight, state-of-the-art open models from Google, built from the same research and technology used to create the Gemini models." This folder contains source code that adapts the model for running on RDU. 
 
-== Architecture Changes 
+== Architecture changes 
 
 Model Zoo models maintain checkpoint compatibility with Hugging Face, so there are no architecture differences. 
 
 * See  xref:patch_gemma.py[] for details on how we've modified the model to run on RDU
 * See xref:../../examples/nlp/training/README.adoc[the training README] and the  xref:../../examples/nlp/text_generation/README.adoc[text generation README] for discussions of CPU/RDU differences. 
 
-== General Use Cases
+== General use cases
 
 See the link:https://huggingface.co/google/gemma-7b-it[Gemma Model Card] and the link:https://ai.google.dev/gemma/docs[Gemma models overview]. SambaNova does not ship checkpoints for this model. Instead, you can use the Model Zoo model source with the corresponding Hugging Face checkpoint. 
 
-== Data Preparation
+== Data preparation
 
 Our models expect data in HDF5 format. See the SambaNova data preparation scripts in link:https://github.com/sambanova/generative_data_prep[this public GitHub repo]. 
 
-== Model Parameters and Configuration
+== Model parameters and configuration
 
 See link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] for a discussion of modification options and limitations.  
 
-== Supported Models
+== Supported models
 Model Zoo currently supports the following Gemma versions: 
 
-* gemma-7b
+* Gemma-7b
 
 link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] lists the checkpoints that we have tested, but you can use other Hugging Face checkpoints for the corresponding model. 
+
+== Data parallel functionality
+
+Data-parallelism is a method where the dataset is split into several parts, and each part is processed at the same time by different replicas of the application.
+
+The following Gemma models support 8-way data parallel functionality:
+
+* Gemma-7b
+
+See xref:developer::data-parallel.adoc#_what_is_data_parallel[What is data parallel] for more information.

@@ -23,22 +23,23 @@ from .modeling_llama import SNLlamaForCausalLM
 
 
 class LlamaTracer(CachedInferenceTracer, model=SNLlamaForCausalLM):
-    def __init__(self, config: PretrainedConfig, batch_size: int):
+    def __init__(self, config: PretrainedConfig, batch_size: int, token_gen_seq_length: int = 1):
         """
         Llama class for generating dummy inputs for Samba tracing
         
         Args:
             config: Model config object
             batch_size: Batch size since we only support static tracing
+            token_gen_seq_length: Length of token generation sequence length
         """
-        super().__init__(config, batch_size)
+        super().__init__(config, batch_size, token_gen_seq_length)
 
     @property
     def num_key_value_heads(self) -> int:
         return self.config.num_key_value_heads
 
     def _get_kv_cache(self, traced_outputs: Tuple[Any, ...]) -> List[Tuple[SambaTensor, SambaTensor]]:
-        """ Returns the list of KV cache for all layers from the traced output, used for cached inference """
+        """ Returns the list of KV cache for all layers from the traced output. Used for cached inference """
         return [(traced_outputs[i * 2 + 1], traced_outputs[i * 2 + 2]) for i in range(self.config.num_hidden_layers)]
 
 

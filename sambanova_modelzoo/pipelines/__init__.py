@@ -12,9 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from packaging import version
-from transformers import __version__ as transformers_version
 
-
-def is_accepted():
-    return version.parse(transformers_version) >= version.parse('4.43.1')
+from .text_generation import RDUMonolithLLMPipeline, TorchMonolithLLMPipeline

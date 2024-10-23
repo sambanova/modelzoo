@@ -4,6 +4,9 @@
 The training example apps illustrate how you can run a model that's been customized for RDU on a SambaNova system. These examples are meant to illustrate the loading and training mechanisms and are not intended for use in production.
 
 * `cpu_train_llm.py` -- Simple training app on CPU. Serves as a comparison for RDU.
+
+** The CPU app is intended to be used as an example, it is tested only with Llama-2-7b. It is not guaranteed to work outside of the DevBox environment in typical user workflows.
+
 * `rdu_train_llm.py` -- Simple training app for running a large language models on RDU.
 * `rdu_train_llm_dp.py` -- Simple training app for running a large language models on RDU in data parallel mode.
 
@@ -77,6 +80,12 @@ See https://docs.sambanova.ai/runtime/latest/architecture.html#_data_parallel_ap
 
 See the xref:../../../examples/nlp/README.adoc[Walkthrough in the examples README] for detailed instructions.
 
+See the individual model cards and review their data parallel capabilities.
+
+* xref:sambaflow/apps/modelzoo/src/sambanova_modelzoo/models/llama/README.adoc[Llama model card]
+* xref:sambaflow/apps/modelzoo/src/sambanova_modelzoo/models/mistral/README.adoc[Mistral model card]
+* xref:sambaflow/apps/modelzoo/src/sambanova_modelzoo/models/gemma/README.adoc[Gemma model card]
+
 === Compile the PEF for Data Parallel Training
 // TODO: Add note here about the rdu_train_llm_dp.py
 
@@ -143,7 +152,7 @@ The example apps have some limitations to reduce complexity and to make them eas
 
 A separate app `cpu_train_llm.py` demonstrates how to run a Model Zoo model on CPU. This app is intended to allow you to compare the code for RDU and for CPU and to better understand the SambaFlow software stack. View `cpu_train_llm.py` and `rdu_train_llm.py` side by side or compare them in your code editor.
 
-NOTE: Because the CPU app is intended as an example, we've tested it only with Llama 2 7B.
+NOTE: The CPU app is intended to be used as an example, it is tested only with Llama-2-7b. It is not guaranteed to work outside of the DevBox environment in typical user workflows.
 
 === Commonalities between RDU and CPU example apps
 

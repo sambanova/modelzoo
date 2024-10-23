@@ -35,11 +35,14 @@ class MistralConfigurationTransformer(ConfigurationTransformerPlugin):
         return SNMistralConfig
 
     def get_architectures_transform_map(self) -> Dict[Type[PreTrainedModel], Type[PreTrainedModel]]:
-        return {MistralForCausalLM: SNMistralForCausalLM, MistralModel: SNMistralModel}
+        return {
+            MistralForCausalLM: SNMistralForCausalLM,
+            MistralModel: SNMistralModel
+        }
 
 
 class MistralConfigValidator(SNConfigValidatorPlugin):
-    def get_config_type(self) -> SNMistralConfig:
+    def get_config_type(self) -> Type[SNPretrainedConfig]:
         return SNMistralConfig
 
 

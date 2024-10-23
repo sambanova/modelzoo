@@ -1,4 +1,11 @@
+# coding=utf-8
+
+# yapf: disable
+# noqa
+# isort: skip_file
+
 # Modifications Copyright 2024 by SambaNova Systems, Inc. All rights reserved.
+
 # Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -31,14 +38,15 @@ from torch.nn import CrossEntropyLoss
 
 from sambanova_modelzoo.models.config import SNPretrainedConfig
 from sambanova_modelzoo.models.custom_ops import addmm, create_3d_attn_mask, triu_fill, Tensor, upper_triangular_fill, sliding_window_fill
+from sambanova_modelzoo.models.directives import add_directives
 from sambanova_modelzoo.libs.nlp.core.directives import sdpa_directives
 from sambanova_modelzoo.models.modeling_utils import (
     apply_rotary_pos_emb,
     get_position_ids,
     get_sliced_hidden_states,
     update_kv_cache,
-    GlobalNamedTensor,
-    get_cos_sin_cache
+    get_cos_sin_cache,
+    TensorCache
 )
 from sambanova_modelzoo.models.modeling_patch_utils import MASK_MIN_VALUE, finfo_float32_min_patch
 from sambanova_modelzoo.models.patch_router import (
@@ -54,6 +62,7 @@ from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_m
 from sambanova_modelzoo.models.mistral.heuristics.hyperfunction_mistral import MistralHyperfunction
 
 logger = logging.get_logger(__name__)
+tensor_cache = TensorCache()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -132,6 +141,20 @@ def sn_mistral_rotary_embedding_forward(self, x, seq_len=None):
         sin_slice.to(dtype=x.dtype),
     )
 
+def sn_mistral_mlp_forward(self, x):
+    with add_directives({'opfusion_id': 'up_proj'}): 
+            up_proj = self.up_proj(x)
+
+    with add_directives({'opfusion_id': 'gate_proj'}): 
+        gate_proj = self.gate_proj(x)
+
+    result = self.act_fn(gate_proj) * up_proj
+
+    with add_directives({'opfusion_id': 'down_proj'}): 
+        down_proj = self.down_proj(result)
+
+    return down_proj
+
 
 def sn_mistral_sdpa(
         self,
@@ -145,7 +168,7 @@ def sn_mistral_sdpa(
         seg_softmax_block_size: Optional[int],
         sliding_window_size: int = 4096) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Description of SDPA can be found in go/flash-attention or go/air-sdpa-mapping
+    ##SN: Description of SDPA can be found in go/flash-attention or go/air-sdpa-mapping
     Args:
         q: Query states, input to sdpa.
         k: Key states, input to sdpa.
@@ -207,7 +230,8 @@ def sn_mistral_sdpa(
             'sdp_block_size': seg_softmax_block_size,
             'sdp_sliding_window_size': (sliding_window_size, sliding_window_size)
     }):
-        attn_output = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p, is_causal=is_causal)
+        with add_directives({'opfusion_id': 'sdpa'}): 
+            attn_output = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p, is_causal=is_causal)
         return attn_output, attn_output
 
 
@@ -251,7 +275,10 @@ def sn_mistral_non_sdpa(
     """
     bsz, num_heads, q_len, head_dim = q.shape
     kv_seq_len = v.shape[-2]
-    attn_weights = torch.matmul(q, k.transpose(2, 3))
+
+    trans = k.transpose(2, 3)
+    with add_directives({'opfusion_id': 'matmul'}): 
+        attn_weights = torch.matmul(q, trans)
 
     # mixedp_attn
     attn_weights = attn_weights.float()
@@ -284,7 +311,8 @@ def sn_mistral_non_sdpa(
     # mixedp_attn downcast before second matmul
     if mixedp_attn:
         attn_weights = attn_weights.bfloat16()
-    attn_output = torch.matmul(attn_weights, v)
+    with add_directives({'opfusion_id': 'matmul_1'}): 
+        attn_output = torch.matmul(attn_weights, v)
 
     if attn_output.size() != (bsz, num_heads, q_len, head_dim):
         raise ValueError(f"`attn_output` should be of size {(bsz, num_heads, q_len, head_dim)}, but is"
@@ -328,14 +356,19 @@ def sn_mistral_attention_forward(
             Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]: The output attention weights, attention weights, and cached key-value pairs.
         """
         bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        with add_directives({'opfusion_id': 'q_proj'}): 
+            query_states = self.q_proj(hidden_states)
+        
+        with add_directives({'opfusion_id': 'k_proj'}): 
+            key_states = self.k_proj(hidden_states)
+        
+        with add_directives({'opfusion_id': 'v_proj'}): 
+            value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        with add_directives({'opfusion_id': 'value_states'}):
+            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         past_key_value_provided = past_key_value is not None
 
@@ -352,9 +385,9 @@ def sn_mistral_attention_forward(
                 layer_past_value = layer_past_value.bfloat16()
                 key_states = key_states.bfloat16()
                 value_states = value_states.bfloat16()
-
+            
             key_states, value_states = update_kv_cache(layer_past_key, layer_past_value, key_states, value_states,
-                                                       last_token_index)
+                                                        last_token_index)
             past_key_value = (key_states, value_states) if use_cache else None
         else:
             # [SambaNova] cache gen on the prompt / non-cached inference / training
@@ -363,14 +396,15 @@ def sn_mistral_attention_forward(
                 key_states_padded, value_states_padded = key_states, value_states
                 if self.config.max_seq_length is not None and q_len < self.config.max_seq_length:
                     shape = (bsz, self.num_key_value_heads, self.config.max_seq_length - q_len, self.head_dim,)
-                    zero_padding = torch.zeros(shape, dtype=key_states.dtype)
-                    zero_padding = GlobalNamedTensor.convert(zero_padding, f'zero_padding_{shape}')
+                    zero_padding = tensor_cache.get_or_create_zeroes(key=f'zero_padding_{shape}', shape=shape,
+                                                                     dtype=key_states.dtype)
                     key_states_padded = torch.cat((key_states, zero_padding), dim=2)
                     value_states_padded = torch.cat((value_states, zero_padding), dim=2)
                 past_key_value = (key_states_padded, value_states_padded)
 
         # repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        with add_directives({'opfusion_id': 'reshape_kv'}): 
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
         is_causal = not consume_cache
 
@@ -388,7 +422,8 @@ def sn_mistral_attention_forward(
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-        attn_output = self.o_proj(attn_output)
+        with add_directives({'opfusion_id': 'o_proj'}): 
+            attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
@@ -434,7 +469,8 @@ def sn_mistral_decoder_forward(
         if self.config.fp32_skip_add:
             residual = residual.float()
 
-        hidden_states = self.input_layernorm(hidden_states)
+        with add_directives({'opfusion_id': 'input_layernorm'}): 
+            hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(hidden_states=hidden_states,
@@ -447,16 +483,19 @@ def sn_mistral_decoder_forward(
                                                                              last_token_index=last_token_index,
                                                                              cos=cos,
                                                                              sin=sin)
-        hidden_states = residual + hidden_states
+        with add_directives({'opfusion_id': 'o_proj_add'}):
+            hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         # fp32_skip_add
         if self.config.fp32_skip_add:
             residual = residual.float()
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        with add_directives({'opfusion_id': 'post_attention_layernorm'}):
+            hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        with add_directives({'opfusion_id': 'mlp_add'}):
+            hidden_states = residual + hidden_states
 
         outputs = (hidden_states, )
 
@@ -573,7 +612,11 @@ def sn_mistral_model_forward(
         hidden_states = inputs_embeds
 
         with self.hyperfunction.embedding(seq_length, consume_cache, self.training, reuse_last_id=True):
-            cos, sin = self.rotary_emb(hidden_states, seq_len=max(seq_length, past_key_values_length))
+            seq_len = max(seq_length, past_key_values_length)
+            cos, sin = tensor_cache.get_or_create_tuple(
+                f"{seq_len}_cos_sin_tensors", 
+                lambda: self.rotary_emb(hidden_states, seq_len=seq_len)
+            )
             cos, sin = get_cos_sin_cache(cos, sin, position_ids)
 
         if self.gradient_checkpointing and self.training:
@@ -637,7 +680,8 @@ def sn_mistral_model_forward(
                 hidden_states = get_sliced_hidden_states(hidden_states, last_token_index)
             # [SambaNova]: Reutrn hidden_states before norm for performant mapping through fusing norm, lm_head and sampling.
             last_hidden_states_before_norm = hidden_states
-            hidden_states = self.norm(hidden_states)
+            with add_directives({'opfusion_id': 'norm'}): 
+                hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -717,7 +761,8 @@ def sn_mistral_for_causallm_forward(
         hidden_states = outputs[0]
 
         with self.hyperfunction.classifier(seq_length, consume_cache, self.training, reuse_last_id=True):
-            logits = self.lm_head(hidden_states)
+            with add_directives({'opfusion_id': 'lm_head'}): 
+                logits = self.lm_head(hidden_states)
             if self.config.fp32_logits:
                 logits = logits.float()
 

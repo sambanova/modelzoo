@@ -30,7 +30,7 @@ Local Environment Setup
       docker run -it --name <new-container-name> <new-image-name>
 
       # Example: Please replace container-name, image-name, and mount paths as needed
-      docker pull python:3.9
+      docker pull python:3.8
       docker run -it -v ${PWD}:/home/project --name example-container python:3.9 /bin/bash
       ### Run any commands you wish to in the docker container; Mount additional directories as needed for your use-case. ###
       # Save the current state of container as a new image as needed by typing this in a separate terminal/shell
@@ -63,7 +63,7 @@ Local Environment Setup
    .. code-block::
 
       pip install pipenv
-      pipenv --python <VERSION>  # Creates a virtual environment for the project with specified VERSION; e.g. pipenv --python 3.9
+      pipenv --python <VERSION>  # Creates a virtual environment for the project with specified VERSION; e.g. pipenv --python 3.8
 
 #. Install and set-up Required Python Packages in editable mode
 

@@ -13,13 +13,15 @@
 # limitations under the License.
 
 from contextlib import nullcontext
-from typing import ContextManager, Optional
+from typing import Any, ContextManager, Dict, Optional, Union
 
+import torch
 from sambanova_modelzoo.models.schema import HyperfunctionDirective
 from sambanova_modelzoo.models.utils import is_jit
 
 
-def add_directives(directive: Optional[HyperfunctionDirective]) -> ContextManager['hyperfunction']:
+def add_directives(directive: Optional[Union[HyperfunctionDirective, Dict[str, Any]]]
+                   ) -> ContextManager['hyperfunction']:
     """
     Add directive context. Do nothing for JIT frontends currently.
     Args:
@@ -29,7 +31,9 @@ def add_directives(directive: Optional[HyperfunctionDirective]) -> ContextManage
     """
     if not is_jit():
         import sambaflow.samba as samba
-        return samba.session._add_directives(directive.model_dump() if directive is not None else None)
+        if isinstance(directive, HyperfunctionDirective):
+            directive = directive.model_dump()
+        return samba.session._add_directives(directive)
     return nullcontext()
 
 
@@ -41,3 +45,27 @@ def op_fusion(*args, **kwargs) -> ContextManager:
         from sambaflow.samba.directives import op_fusion as samba_op_fusion
         return samba_op_fusion(*args, **kwargs)
     return nullcontext()
+
+
+def add_aux_tensor(tensor: torch.Tensor, name: str) -> None:
+    """
+    Add add_aux_tensor from samba. Do nothing for JIT frontends currently.
+    Args:
+        tensor: the corresponding auxiliary torch tensor to be added.
+        name: user-specified name for the SambaTensor.
+    """
+    if not is_jit():
+        import sambaflow.samba as samba
+        return samba.session.add_aux_tensor(tensor, name)
+
+
+def is_valid_aux_tensor_name(name: str) -> bool:
+    """
+    Add add_aux_tensor from samba. Do nothing for JIT frontends currently.
+    Args:
+        tensor: the corresponding auxiliary torch tensor to be added.
+        name: user-specified name for the SambaTensor.
+    """
+    if not is_jit():
+        import sambaflow.samba as samba
+        return samba.session.is_valid_aux_tensor_name(name)

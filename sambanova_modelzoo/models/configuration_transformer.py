@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class ConfigurationTransformerPlugin(abc.ABC):
     """
     A configuration transformation plugin based system.
-    Define a plugin for each model to allow conversion from hugging face transformer
+    Define a plugin for each model to allow conversion from Hugging Face transformer
     config to a SambaNova config.
     Plugins are all subclasses of ConfigurationTransformerPlugin, and they are automatically
     added to the plugin list when imported, once.
@@ -50,6 +50,10 @@ class ConfigurationTransformerPlugin(abc.ABC):
         to_config = plugin.get_target_conversion_type()
         model_type_id = to_config.get_model_type_id()
 
+        transform_map = plugin.get_architectures_transform_map()
+        if len(transform_map) != len(set(transform_map.values())):
+            raise ValueError(f"The get_architectures_transform_map for model type '{model_type_id}' is not bijective.")
+
         from transformers import AutoConfig
         AutoConfig.register(model_type_id, to_config)
 
@@ -68,7 +72,8 @@ class ConfigurationTransformerPlugin(abc.ABC):
         """
         Returns: Map of model architectures from hf to sn, e.g. MistralForCausalLM to SNMistralForCausalLM.
         """
-    def is_match(self, source_config: PretrainedConfig) -> bool:
+
+    def is_match(self, source_config: Union[PretrainedConfig, SNPretrainedConfig]) -> bool:
         """
         Args:
             source_config
@@ -86,6 +91,7 @@ class ConfigurationTransformerPlugin(abc.ABC):
             config: the config object to transform into a new SambaNova model config.
             sn_model_args: the args we should choose from when constructing the new SNPretrainedConfig subclass object.
                            This may safely be a superset containing parameters that the specific SN config will not use.
+                           # TODO: a superset containing arguments? args?
             original_config_overrides: any arguments that should be overridden in the original config. If provided these
                            will override the plugin's defined original config overrides if there is a match.
 
@@ -130,7 +136,7 @@ class ConfigurationTransformerPlugin(abc.ABC):
             ignored = ", ".join(f"{k}: {v}" for k, v in provided_args.items() if k not in specific_args)
             message = (f"You are passing 'sn_model_args' that are not defined in {target_type_name} "
                        f"nor SNPretrainedConfig! "
-                       f"These areguments will be ignored: {{ {ignored} }}. This is OK if it is intentional."
+                       f"These arguments will be ignored: {{ {ignored} }}. This is OK if it is intentional."
                        f"If your intention is that these are SambaNova model patch args, "
                        f"then add them to {target_type_name} if they are model specific, or to SNPretainedConfig if "
                        f"they are general parameters for SN patched models.")
@@ -142,13 +148,13 @@ class ConfigurationTransformerPlugin(abc.ABC):
 # ====================================
 class ConfigurationTransformer:
     """
-    A configuration transformation plugin based system for converting HuggingFace
+    A configuration transformation plugin-based system for converting Hugging Face
     PretrainedConfig to SambaNova configs.
     """
     def __init__(self, plugins: List[ConfigurationTransformerPlugin] = None):
         """
         Args:
-            plugins: optional, a list of instances of plugins of unique plugins.
+            plugins: Optional. A list of unique plugin instances.
                      If None then use the globally registered list of plugins,
                      else use the specified list of plugin instances.
         """
@@ -162,9 +168,9 @@ class ConfigurationTransformer:
             self._plugins = ConfigurationTransformerPlugin.get_registered_plugins()
             if len(self._plugins) == 0:
                 raise ValueError(
-                    "Expected non-empty plugins list as nothing will match with empty plugins list. "
-                    "For transformers based models, check the transformers package version in your venv and see if "
-                    "it is compatible with the requirements.py. If incompatible, they will not be registered.")
+                    "Expected non-empty plugins list. Nothing matches an empty plugins list. "
+                    "For transformers-based models, check the transformers package version and see if "
+                    "it is compatible with the requirements.py. If incompatible, plugins will not be registered.")
 
     def run(self,
             config: PretrainedConfig,
@@ -174,8 +180,8 @@ class ConfigurationTransformer:
         Applies exactly one plugin matching config.
         If not exactly one plugin matches, then we get an error, the behavior is undefined.
         Args:
-            config: the huggingface config to transform into sn config
-            sn_model_args: the args we should choose from when constructing the new SNPretrainedConfig subclass object.
+            config: the Hugging Face config to transform into a SambaNova config
+            sn_model_args: the args to choose from when constructing the new SNPretrainedConfig subclass object.
             original_config_overrides: additional overrides meant for overriding the original 'config'.
 
         Returns:
@@ -200,10 +206,11 @@ class ConfigurationTransformer:
         Get the matching plugin for config.
         If not exactly one plugin matches, then we get an error, the behavior is undefined.
         Args:
-            config: the huggingface config to transform into sn config
+            config: the Hugging Face config to transform into a SambaNova config, or any subclass of PretrainedConfig
+                    including specific sn configs.
 
         Returns:
-            A transformed config or None if no transformation plugin was applied.
+            The plugin that matches the provided config.
 
         Raises:
             ValueError if not exactly 1 plugin matches
@@ -219,7 +226,7 @@ class ConfigurationTransformer:
 
     def get_plugin_for_type_id(self, model_type_id: str) -> ConfigurationTransformerPlugin:
         """
-        Get the matching plugin for model_type_id as defined in the corresponding SN config (target config)
+        Get the matching plugin for model_type_id as defined in the corresponding SambaNova config (target config)
         If not exactly one plugin matches, then we get an error, the behavior is undefined.
         Args:
             model_type_id: a string that identifies the model type.
@@ -241,7 +248,7 @@ class ConfigurationTransformer:
     def is_model_type_id_registered(self, model_type_id: str) -> bool:
         """
         Args:
-            model_type_id: a string, that identifies a SN model. This is defined in the SN configuration for that model.
+            model_type_id: a string, that identifies a SambaNova model. Defined in the SambaNova configuration for that model.
 
         Returns:
             True if a plugin has been registered that matches the model_type_id, else False

@@ -20,6 +20,8 @@ import torch.nn as nn
 from sambaflow.samba.lazy_param import RNGProvider, RNGProviderFactory
 from sambaflow.samba.nn.parameter import SambaParameter
 
+# TODO: At top of this file or in doc, explain what lazy init does.
+
 
 # [SambaNova] to lazy initialize weights
 class NormalWeightInit:

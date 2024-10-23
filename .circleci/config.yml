@@ -19,44 +19,44 @@ orbs:
   codecov: codecov/codecov@3.3.0
 
 executors:
-  rhel-devbox:
+  rhel-sambaflow:
     docker:
-      - image: ${DOCKER_REGISTRY}/modelzoo/rhel8.5/devbox:0.1.0
+      - image: ${DOCKER_REGISTRY}/modelbox/rhel/modelzoo-dev:1.23.2-8-2024-9-6
         auth:
           username: ${GCLOUD_SERVICE_USER}
           password: ${GCLOUD_SERVICE_KEY}
-    resource_class: xlarge
-  ubuntu-devbox:
+    resource_class: sambanova/btd-idc-xlarge-32cpu # Use an extra beefy on-prem runner because it's on AMD, that's lacking MKL
+  ubuntu-sambaflow:
     docker:
-      - image: ${DOCKER_REGISTRY}/modelzoo/ubuntu20/devbox:0.1.0
+      - image: ${DOCKER_REGISTRY}/modelbox/ubuntu/modelzoo-dev:1.23.2-8-2024-9-6
         auth:
           username: ${GCLOUD_SERVICE_USER}
           password: ${GCLOUD_SERVICE_KEY}
-    resource_class: xlarge
+    resource_class: sambanova/btd-idc-xlarge-32cpu # Use an extra beefy on-prem runner because it's on AMD, that's lacking MKL
   python-3_7:
     docker:
       - image: cimg/python:3.7
-    resource_class: medium
+    resource_class: sambanova/btd-idc-small
   python-3_8:
     docker:
       - image: cimg/python:3.8
-    resource_class: medium
+    resource_class: sambanova/btd-idc-small
   python-3_9:
     docker:
       - image: cimg/python:3.9
-    resource_class: medium
+    resource_class: sambanova/btd-idc-small
   example:
     docker:
       - image: cimg/base:stable
-    resource_class: small
+    resource_class: sambanova/btd-idc-small
   pre-commit-docker:
     docker:
       - image: python:3.8
-    resource_class: medium
+    resource_class: sambanova/btd-idc-medium
   base:
     docker:
       - image: cimg/base:stable
-    resource_class: small
+    resource_class: sambanova/btd-idc-small
 
 commands:
   setup-ssh:
@@ -64,10 +64,10 @@ commands:
       - run:
           name: Add github.com SSH key to known-hosts
           command: mkdir -p ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
-  source-versions:
+  configure-env-vars:
     steps:
       - run:
-          name: Source Versions
+          name: Configure required environment variables
           command: |
             YAML_FILE=".circleci/VERSIONS.yaml"
             CI_PIPENV_VERSION=$(awk '/pipenv:/ {print $2}' "$YAML_FILE")
@@ -75,6 +75,8 @@ commands:
             echo "export CI_PIPENV_VERSION=$CI_PIPENV_VERSION" >> "$BASH_ENV"
             echo "export CI_DOCKER_IMAGE=$CI_DOCKER_IMAGE" >> "$BASH_ENV"
             echo "source ~/.bashrc" >> "$BASH_ENV"
+            codecov_token_name=$(echo "CODECOV_TOKEN-${CIRCLE_PROJECT_REPONAME}" | sed 's/-/_/g')
+            echo "export CODECOV_TOKEN=${!codecov_token_name}" >> "$BASH_ENV"
   python-test:
     steps:
       - run:
@@ -96,12 +98,14 @@ commands:
       - run:
           name: Run Pytest
           command: pytest
-      - codecov/upload
+      - codecov/upload:
+          file: test_reports/coverage/pytest_cov.xml
       - store_test_results:
           path: test_reports/circleci
       - store_artifacts:
           path: test_reports
   python-build-publish:
+    description: "Build and publish Python package to GCP artifactory"
     steps:
       - run:
           name: Generate Cache Key
@@ -119,28 +123,30 @@ commands:
           key: v1-{{ arch }}-{{ checksum "pyproject.toml" }}-{{ checksum "~/circleci_cache_key" }}
           paths:
             - ~/.cache/pip
+      - when:
+          condition:
+            equal: [ <<pipeline.git.branch>>, "main" ]
+          steps:
+            - run:
+                name: Force a git dirty state to make hatch-vcs generate an extra date distance
+                command: |
+                  touch dirty
+                  git add dirty
       - run:
           name: Build Python Package
           command: hatch build
-      - when:
-          condition:
-            or:
-              - equal: [ << pipeline.git.branch >>, main ]
-              - << pipeline.git.tag >>
-          steps:
-            - run:
-                name: Publish Python Package
-                command: |
-                  current_package_version=$(hatch version)
-                  current_package_name=$(hatch project metadata name)
-                  pip_index_output=$(pip index versions --pre ${current_package_name})
-                  available_versions=$(echo "${pip_index_output}" | grep "Available versions:" | sed 's/Available versions: //')
-                  if echo "${available_versions}" | grep -wq "${current_package_version}"; then
-                    echo "Skipping Publish. Python package ${current_package_name}=${current_package_version} already exists in the index."
-                  else
-                    pipenv run hatch publish -r ${HATCH_INDEX_REPO} -u ${GCLOUD_SERVICE_USER} -a ${GCLOUD_SERVICE_KEY}
-                  fi
-
+      - run:
+          name: Publish Python Package
+          command: |
+            current_package_version=$(hatch version)
+            current_package_name=$(hatch project metadata name)
+            pip_index_output=$(pip index versions --pre ${current_package_name})
+            available_versions=$(echo "${pip_index_output}" | grep "Available versions:" | sed 's/Available versions: //')
+            if echo "${available_versions}" | grep -wq "${current_package_version}"; then
+              echo "Skipping Publish. Python package ${current_package_name}=${current_package_version} already exists in the index."
+            else
+              pipenv run hatch publish -r ${HATCH_INDEX_REPO} -u ${GCLOUD_SERVICE_USER} -a ${GCLOUD_SERVICE_KEY}
+            fi
 # Define the jobs we want to run for this project
 jobs:
   pre-commit:
@@ -148,7 +154,7 @@ jobs:
     steps:
       - checkout
       - setup-ssh
-      - source-versions
+      - configure-env-vars
       - run:
           name: Generate Cache Key
           command: |
@@ -170,23 +176,24 @@ jobs:
             - ~/.cache/pre-commit
       - store_artifacts:
           path: docs/build/html
-  test:
+  test-cpu:
     parameters:
       docker-image:
         type: executor
+        default: rhel-sambaflow
     executor: << parameters.docker-image >>
     working_directory: /root/project
     steps:
       - checkout
       - setup-ssh
-      - source-versions
+      - configure-env-vars
       - python-test
   build-publish:
     executor: python-3_8
     steps:
       - checkout
       - setup-ssh
-      - source-versions
+      - configure-env-vars
       - python-build-publish
   notify:
     executor:
@@ -213,7 +220,6 @@ jobs:
               - slack/notify:
                   event: pass
                   template: basic_success_1
-
 # Define the workflows we want to run for this project
 workflows:
   # Build, test, and publish all packages for each PR and each tag
@@ -223,34 +229,48 @@ workflows:
           context: idc-btd-development
           filters:
             tags:
-              only: /^\d+\.\d+\.\d+.*$/
+              only: /^v?\d+\.\d+\.\d+.*$/
+      - test-cpu:
+          context:
+            - idc-btd-development
+            - codecov
+          matrix:
+            parameters:
+              docker-image: [rhel-sambaflow] #ubuntu-sambaflow disabled
+          filters:
+            tags:
+              only: /^v?\d+\.\d+\.\d+.*$/
       - build-publish:
           requires:
             - pre-commit
+            - test-cpu
           context: idc-btd-development
           filters:
             tags:
-              only: /^\d+\.\d+\.\d+.*$/
+              only: /^v?\d+\.\d+\.\d+.*$/
       - notify:
           requires:
             - pre-commit
+            - test-cpu
             - build-publish
           context: slack
           filters:
             tags:
-              only: /^\d+\.\d+\.\d+.*$/
-  # Build, test, and publish all packages on a weekly basis
-  weekly-test-build-publish:
+              only: /^v?\d+\.\d+\.\d+.*$/
+  # Build, test, and publish all packages on a nightly basis
+  nightly-test-build-publish:
     when:
-      equal: [<<pipeline.trigger_source>>, "scheduled_pipeline"]
+      equal: [<<pipeline.schedule.name>>, "nightly"]
     jobs:
       - pre-commit:
           context: idc-btd-development
-      - test:
-          context: idc-btd-development
+      - test-cpu:
+          context:
+            - idc-btd-development
+            - codecov
           matrix:
             parameters:
-              docker-image: [rhel-devbox, ubuntu-devbox]
+              docker-image: [rhel-sambaflow, ubuntu-sambaflow]
       - build-publish:
           context: idc-btd-development
       - notify:

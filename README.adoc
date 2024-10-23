@@ -1,4 +1,4 @@
-image:https://codecov.io/gh/sambanova/modelzoo/graph/badge.svg?token=dFj2NRzSEp["codecov", link="https://codecov.io/gh/sambanova/modelzoo"]
+image:https://codecov.io/gh/sambanova/modelzoo-internal/graph/badge.svg?token=HlLsLZwhJP["codecov", link="https://codecov.io/gh/sambanova/modelzoo-internal"]
 image:https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white["pre-commit", link="https://github.com/pre-commit/pre-commit"]
 image:https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336["isort", link="https://pycqa.github.io/isort"]
 

@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+defaults:
+    - nlp_default_args
+    - _self_
+
+hydra:
+  searchpath: 
+    - pkg://sambanova_modelzoo/libs/nlp/args
+
+# Model configs, changes here are effective only if the PEF is compiled/re-compiled.
 model:
     # Toggle to control the normalization layer precision. True means fp32 and false means bf16. 
     fp32_ln: False
@@ -32,6 +41,8 @@ model:
 
 checkpoint:
     # Path to the downloaded Hugging Face cache, including checkpoints, model config and tokenizer.
+    # You can either use 'checkpoint.model_name_or_path' to load weights from disk or 'checkpoint.config_name' to randomly initialize weights for pretraining. 
+    # Only one option can be used at a time in the training app.
     model_name_or_path: null
     config_name: null
 
@@ -47,6 +58,7 @@ training:
 command: null
 
 # Compiler configs for PEF optimization and generation.
+# Changes here will only be reflected if the PEF is compiled/re-compiled.
 # NOTE: only need to change arch/output_folder and keep the others as default.
 samba_compile:
     # Required! Target RDU architecture to compile to: sn20, sn30, sn40. 
@@ -60,20 +72,8 @@ samba_compile:
     # The default O3 uses the full graph optimization scope and compiles more slowly.
     # See https://docs.sambanova.ai/developer/latest/compiler-o1.html for background information. 
     optim_level: o1
-    # The SambaFlow compiler performs blfoat16 computation by default. 
-    # This flag forces operators to be in float32/bfloat16 mixed precision.
-    # See https://docs.sambanova.ai/developer/latest/compiler-o1.html for background information. 
-    enable_mixed_precision_ops:
-        - gemm
-        - softmax
-    # Legacy option. Do not change. 
-    enable_multi_input_broadcast: True
     # A legacy flag for O1 optimization.
     o1_experimental_opts: True
-    # Accumulation mode for tiling, bf16sr means bf16 inputs with stochastic rounding.
-    tiling_accum: bf16sr
-    # A legacy flag for CrossEntropyLoss.
-    use_air_ce: True
     # An optional path to an operator fusion rules file that specifies the o1 pattern fusion 
     # and heuristis in predefined yaml file format. 
     # See https://docs.sambanova.ai/developer/latest/opfusion-rule-syntax.html
@@ -81,11 +81,6 @@ samba_compile:
     use_o1_default_rules: True
     enable_distribution_pass: True
     weight_grad_reduce: bf16sr
-    # Number of tiles to be used on chip. If you don't set num_tiles=4 on an SN30 system,
-    # the compiler uses tensor parallel mode, which is not currently supported with Model Zoo. 
-    num_tiles: 4
-    # Enable HBM allocation for sn40
-    all_regions_hbm: True
     enable_safe_stochastic_rounding: True
 
 # Run configs 

@@ -35,6 +35,8 @@ class TrainingConfig(BaseModel, extra='forbid'):
     batch_size: Optional[PositiveInt] = Field(description="The (static) number of samples to train over at a time",
                                               requires_recompile=True)
     num_epochs: PositiveInt = Field(default=1, description="The number of times to iterate over the dataset")
+    end_early_at_step: Optional[PositiveInt] = Field(default=None, description="The number of training steps to run. " \
+            "Intended for testing only as this must be less than the length of the dataset")
     learning_rate: PositiveFloat = Field(default=1e-5, description="The starting learning rate for the optimizer")
     output_dir: str = Field(default='trained_model', description="Path to folder to save trained checkpoint")
     evaluate: bool = Field(default=False, description="Whether to evaluate the model on the dev set after each epoch")

@@ -19,14 +19,16 @@ from sambanova_modelzoo.libs.common.pretrained_model_schema import PretrainedMod
 from sambanova_modelzoo.libs.common.samba_schema import SambaConfig, ValidatorConfig
 from typing_extensions import Self
 
+# TODO: Add a brief overview of why this file exists and how it interacts with the config YAML.
+
 
 class GenerationConfig(BaseModel):
     """ Config for text generation including testing purposed flags """
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(protected_namespaces=('protected_', ), extra='forbid')
 
     batch_size: PositiveInt = Field(description="Static batch size", default=1)
     fuse_lm_head_with_postprocess: bool = Field(
-        description="Fuse lm_head with Postprocess graph for better performance", default=True)
+        description="Fuse lm_head with the postprocessing graph for better performance", default=True)
     prompts: List[str] = Field(description="Prompt input")
     max_new_tokens: Optional[PositiveInt] = Field(description="Maximum generated tokens", default=None)
     expected_completions: Optional[List[str]] = Field(description="Expected completion sentences", default=None)
@@ -34,8 +36,8 @@ class GenerationConfig(BaseModel):
     seed: PositiveInt = Field(description="Random seed on torch/numpy/python for reproducibility", default=12345)
     test_out_of_bound: bool = Field(description="Testing out-of-bound generation on longer inputs", default=False)
     generation_strategy: Optional[Dict[str, Any]] = Field(
-        description="Additional parameters to huggingface generation call", default=None)
-    output_top_logits: bool = Field(description="If true, output a table of top 3 logits per token per prompt.",
+        description="Additional parameters to Hugging Face generation call", default=None)
+    output_top_logits: bool = Field(description="If true, output a table of the top 3 logits per token per prompt.",
                                     default=False)
     static_seq_lengths: Optional[List[PositiveInt]] =\
             Field(description="Static sequence length to pad the input_ids for cache generation graph", default=None)
@@ -57,8 +59,8 @@ class RDUGenerationAppConfig(SambaConfig, ValidatorConfig):
     """ Config for text generation application including testing purposed flags """
     model_config = ConfigDict(extra='forbid')
 
-    model: PretrainedModelConfig = Field('Model specific arguments')
-    generation: GenerationConfig = Field('Application specific arguments')
+    model: PretrainedModelConfig = Field('Model-specific arguments')
+    generation: GenerationConfig = Field('Application-specific arguments')
 
     @model_validator(mode='after')
     def prompts(self) -> Self:

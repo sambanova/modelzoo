@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Model configs, changes here are effective only if the PEF is compiled/re-compiled.
 model:
     # Toggle to control the normalization layer precision. True means fp32 and false means bf16.
     fp32_ln: False
@@ -26,6 +27,8 @@ model:
     max_seq_length: null
 
 checkpoint:
+    # You can either use 'checkpoint.model_name_or_path' to load weights from disk or 'checkpoint.config_name' to randomly initialize weights for pretraining.
+    # Only one option can be used at a time in the training app.
     model_name_or_path: null
     config_name: null
 
@@ -42,6 +45,7 @@ training:
 command: null
 
 # Compiler configs for PEF optimization and generation.
+# Changes here will only be reflected if the PEF is compiled/re-compiled.
 # NOTE: only need to change arch/output_folder and keep the others as default.
 samba_compile:
     # RDU architecture to compile to, e.g. sn20/sn30/sn40.

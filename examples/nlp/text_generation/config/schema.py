@@ -30,6 +30,8 @@ class GenerationConfig(BaseModel):
     batch_size: PositiveInt = Field(description="Static batch size")
     static_seq_lengths: Optional[List[PositiveInt]] =\
             Field(description="Static sequence length to pad the input_ids for cache generation graph", default=None)
+    output_dir: str = Field(default='text_gen_telemetry', description="Path to folder to save text_gen telemetry")
+
 
 
 class RDUGenerationAppConfig(SambaConfig, ValidatorConfig):

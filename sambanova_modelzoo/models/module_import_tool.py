@@ -19,13 +19,16 @@ import pathlib
 import types
 from typing import Callable, Optional, Set, Tuple, Type
 
+# TODO: Explain what this file does in a sentence or two.
+
 
 def find_plugin_files(files_matcher_glob: str, base_class: Type, predicate: Callable[[str, str], bool]) -> Set[str]:
     """
     Recursively import all plugins (provided is matching glob) so that they register in the
     ConfigurationTransformerPlugins
+    TODO: I don't understand "provided is matching glob" 
     Args:
-        files_matcher_glob: a glob string matching the files to look at, e.g. models/*/conf*.py or models/**/conf.py
+        files_matcher_glob: a glob string that matches the files to look at, e.g. models/*/conf*.py or models/**/conf.py
         base_class: the base class to look for in files, plugins inherit base_class
         predicate: this is used to determine if file should be selected based on the base_class name
     Returns:
@@ -39,9 +42,9 @@ def find_plugin_files(files_matcher_glob: str, base_class: Type, predicate: Call
 
 def find_general_files(files_matcher_glob: str) -> Set[str]:
     """
-    Recursively find files matching files_matcher_glob
+    Recursively find files that match files_matcher_glob
     Args:
-        files_matcher_glob: a glob string matching the files to look at, e.g. models/*/conf*.py or models/**/conf.py
+        files_matcher_glob: a glob string that matches the files to look at, e.g. models/*/conf*.py or models/**/conf.py
     Returns:
         Set[str]: the files that were imported
     """
@@ -57,7 +60,7 @@ def find_import_files(path_matcher_glob: str, filename_matcher_glob: str) -> Set
         filename_matcher_glob:
 
     Returns:
-        a set of Typle[str, str] of file to import and requirement file to evaluate before importing
+        a set of Tuple[str, Optional[str]] of files to import and their corresponding requirements file to evaluate before importing (if any)
     """
     found_import_files = set()
     matched_files = glob.glob(path_matcher_glob + '/' + filename_matcher_glob, recursive=True)
@@ -82,7 +85,7 @@ def import_modules(module_files: Set[str], package_dir: str, package_name: str) 
         package_dir: the absolute directory of the module
         package_name: the name of the base package
     Returns:
-        True if all went without errors, raises exception if not.
+        True if all went without errors, raises an exception if not.
     """
     _check_that_files_in_package(module_files, package_dir, package_name)
 
@@ -124,11 +127,11 @@ def _is_requirement_ok(requirements_file: str, package_dir: str, package_name: s
 
 def is_subclass_in_file(file_path: str, base_class_name: Optional[str] = None) -> bool:
     """
-    A Predicate, check if a file contains a class that is a direct subclass of base_class_name
+    Checks if a file contains a class that is a direct subclass of base_class_name
     Args:
         file_path: the path to the file
         base_class_name: the base class to look for
-        default is None which results in always False. Empty string also results in always false.
+        default is None, which always returns False. The empty string also results in false.
         Provide the string to search for in the file pointed to by file_path.
 
     Returns: True if file contains a direct subclass of base_class_name, else False

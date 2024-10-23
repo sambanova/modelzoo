@@ -23,15 +23,17 @@ from .modeling_mistral import SNMistralForCausalLM
 
 
 class MistralTracer(CachedInferenceTracer, model=SNMistralForCausalLM):
-    def __init__(self, config: PretrainedConfig, batch_size: int):
+    def __init__(self, config: PretrainedConfig, batch_size: int, token_gen_seq_length: int = 1):
         """
         Mistral class for generating dummy inputs for Samba tracing
         
         Args:
             config: Model config object
             batch_size: Batch size since we only support static tracing
+            token_gen_seq_length: Length of token generation sequence length
         """
-        super().__init__(config, batch_size)
+        assert token_gen_seq_length == 1, "Mistral only supports token_gen_seq_length=1"
+        super().__init__(config, batch_size, token_gen_seq_length)
 
     @property
     def num_key_value_heads(self) -> int:

@@ -23,7 +23,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -52,7 +51,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -81,7 +79,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -110,7 +107,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -139,7 +135,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -168,7 +163,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -197,7 +191,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -226,7 +219,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -396,7 +388,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -425,7 +416,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -454,7 +444,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -483,7 +472,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -512,7 +500,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -541,7 +528,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -570,7 +556,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -599,7 +584,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -827,7 +811,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -856,7 +839,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -885,7 +867,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -914,7 +895,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -943,7 +923,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -972,7 +951,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -1001,7 +979,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,
@@ -1030,7 +1007,6 @@
           "samba_compile": {
             "all_regions_hbm": true,
             "inference": true,
-            "use_air_ce": true,
             "optim_level": "o1",
             "n_chips": 1,
             "o1_experimental_opts": true,

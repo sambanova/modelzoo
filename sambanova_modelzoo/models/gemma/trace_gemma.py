@@ -12,16 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sambanova_modelzoo.libs.nlp.core.clm_tracer import PretrainTracer
-from sambanova_modelzoo.models.llama.trace_llama import LlamaTracer
+from typing import Any, List, Tuple
+
+from sambanova_modelzoo.libs.nlp.core.clm_tracer import CachedInferenceTracer, PretrainTracer
+from sambanova_modelzoo.models.config import PretrainedConfig
+
+from sambaflow.samba import SambaTensor
 
 from .modeling_gemma import SNGemmaForCausalLM
 
-"""Gemma inputs are the same as Llama inputs"""
 
+class GemmaTracer(CachedInferenceTracer, model=SNGemmaForCausalLM):
+    def __init__(self, config: PretrainedConfig, batch_size: int, token_gen_seq_length: int = 1):
+        """
+        Gemma class for generating dummy inputs for Samba tracing
+        
+        Args:
+            config: Model config object
+            batch_size: Batch size since we only support static tracing
+            token_gen_seq_length: Length of token generation sequence length
+        """
+        assert token_gen_seq_length == 1, "Gemma only supports token_gen_seq_length=1"
+        super().__init__(config, batch_size, token_gen_seq_length)
 
-class GemmaTracer(LlamaTracer, model=SNGemmaForCausalLM):
-    pass
+    @property
+    def num_key_value_heads(self) -> int:
+        return self.config.num_key_value_heads
+
+    def _get_kv_cache(self, traced_outputs: Tuple[Any, ...]) -> List[Tuple[SambaTensor, SambaTensor]]:
+        """ Returns the list of KV cache for all layers from the traced output. Used for cached inference """
+        return [(traced_outputs[i * 2 + 1], traced_outputs[i * 2 + 2]) for i in range(self.config.num_hidden_layers)]
 
 
 class GemmaPretrainTracer(PretrainTracer, model=SNGemmaForCausalLM):

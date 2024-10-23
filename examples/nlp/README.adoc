@@ -1,8 +1,8 @@
-= Walkthrough--Inference and Fine-tuning with Llama2 7B for Chat [[Walkthrough]]
+= Walkthrough--Inference and Fine-tuning with Llama-2-7b for Chat [[Walkthrough]]
 
 The Model Zoo NLP examples illustrate how to run training and text generation (inference) on RDU. You can explore how the code for running SambaNova RDU differs from the corresponding code for running on CPU. In this initial release, these examples are not intended for use in production because they are not tuned for performance.
 
-NOTE: Because the CPU app is intended as an example, we've tested it only with Llama 2 7B. 
+NOTE: The CPU app is intended to be used as an example, it is tested only with Llama-2-7b. It is not guaranteed to work outside of the DevBox environment in typical user workflows.
 
 In this walkthrough, you learn how to run inference and fine tuning. Depending on the tasks you want to perform next, you can go through both of these tasks or just one of them. 
 
@@ -34,11 +34,11 @@ NOTE: Model Zoo models are compatible with any Hugging Face bfloat16 or float32 
 
 You will use the checkpoint for inference, and as a starting point for fine-tuning.
 
-To download the Llama2 7B checkpoint for this walkthrough:
+To download the Llama-2-7b checkpoint for this walkthrough:
 
 . Make sure https://git-lfs.com[Git LFS] is installed: `git lfs install`.
 . Create a https://huggingface.co/join[Hugging Face account].
-. Go to https://huggingface.co/meta-llama/Llama-2-7b-hf[meta-llama/Llama-2-7b-hf] and accept the terms of use for Llama2 7B.
+. Go to https://huggingface.co/meta-llama/Llama-2-7b-hf[meta-llama/Llama-2-7b-hf] and accept the terms of use for Llama-2-7b.
 . In your https://huggingface.co/settings/tokens[Hugging Face account settings], generate a link:https://huggingface.co/docs/hub/en/security-tokens[user access token].
 . Clone the model:
 .. `git clone \https://huggingface.co/meta-llama/Llama-2-7b-hf`
@@ -149,7 +149,7 @@ samba_run.pef=PATH_TO_PEF \
 'generation.prompts=["Once upon a time", "The tallest mountain"]'
 ----
 
-At the end of a text generation run, the app saves a checkpoint and outputs some basic telemetry and performance metrics to `stdout` with information like the following: 
+At the end of a text generation run, the app saves a checkpoint and outputs some basic telemetry and performance metrics to a summary.txt file with information like the following: 
 
     latencies
         time to first token 1.2131s
@@ -162,7 +162,7 @@ At the end of a text generation run, the app saves a checkpoint and outputs some
 
 == Task 2: Run Training - Fine-tune the Model using a Chat Dataset
 
-In this task, you fine-tune link:https://llama.meta.com/llama2/[Llama2 7B]. You prepare a dataset, compile the model, and fine-tune the model with the dataset to see if you can improve the domain-specific accuracy of the model. The training parameters are set in the `training/config/base_config_rdu.yaml` file.
+In this task, you fine-tune link:https://llama.meta.com/llama2/[Llama-2-7b]. You prepare a dataset, compile the model, and fine-tune the model with the dataset to see if you can improve the domain-specific accuracy of the model. The training parameters are set in the `training/config/base_config_rdu.yaml` file.
 
 NOTE: If you're primarily interested in text generation (inference), follow the steps in <<Task 1: Run Inference - Generate Text Using a Checkpoint>>. 
 
@@ -209,7 +209,7 @@ The following is a subset of an example input file for multi-turn chat data.
 [{"prompt": "What is your favorite hobby?", "completion": "My favorite hobby is reading."},<3>
 {"prompt": "That's interesting. What book are you currently reading?", "completion": "I am currently reading 'The Catcher in the Rye' by J.D. Salinger."}]
 ----
-<1> Each line in the `.jsonl` file is a json object, in this case a list.
+<1> Each line in the `.jsonl` file is a JSON value, in this case a list.
 <2> Each list represents one article. The order of the prompt-completion pairs will not be shuffled.
 <3> `prompt` and `completion` are provided separately to provide more importance (weight) to the completion during training.
 
@@ -359,6 +359,8 @@ python -u rdu_train_llm.py \
     training.dataset=${DATASET}
 ----
 
+TIP: By default, training runs for 1 epoch (sees all samples once). To run for more epochs, modify the config file or use training.num_epochs=3. To run only for a few steps for testing, use +training.end_early_at_step=100. 
+
 ==== Output
 
 At the end of training, the example app saves a checkpoint and a `summary.txt` file at the location defined inside the `config/base_config_rdu.yaml` configuration file. By default, this location is set to `finetuned_model` in the current working directory. After training, this folder contains the following:
@@ -385,7 +387,7 @@ At the end of training, the example app saves a checkpoint and a `summary.txt` f
 
 * *Random weights*: To initialize weights for pretraining randomly (instead of from disk) use `checkpoint.config_name` instead of `checkpoint.model_name_or_path`.
 
-* *Running Llama2 70B*. With most supported models, you can run training with the command above and the default values in `config/base_config_rdu.yaml`. The only exception is Llama2 70B, which requires that you use Tensor Parallel to ensure the model fits on the RDU. Use these settings in the `samba_compile` section of the `config/base_config_rdu.yaml` file:
+* *Running Llama-2-70b*. With most supported models, you can run training with the command above and the default values in `config/base_config_rdu.yaml`. The only exception is Llama-2-70b, which requires that you use Tensor Parallel to ensure the model fits on the RDU. Use these settings in the `samba_compile` section of the `config/base_config_rdu.yaml` file:
 
     samba_compile:
     tensor_parallel: weight
@@ -435,6 +437,12 @@ python rdu_generate_text.py \
 
 Data parallel training can result in significant performance improvements, so we're including those instructions. See https://docs.sambanova.ai/runtime/latest/architecture.html#_data_parallel_applications[Data Parallel Applications] for a high-level overview of how data parallel applications work.
 
+See the individual model cards and review their data parallel capabilities.
+
+* xref:sambanova_modelzoo/models/llama/README.adoc[Llama model card]
+* xref:sambanova_modelzoo/models/mistral/README.adoc[Mistral model card]
+* xref:sambanova_modelzoo/models/gemma/README.adoc[Gemma model card]
+
 === Step 1: Compile for Data Parallel Training
 
 The graph must be compiled explicitly to work with data parallel. Under the hood, the compiler annotates the gradient symbols in the PEF and adds one or more reduce operand buffers to the graph that will be used during the gradient synchronization. Some grouping is applied to the gradient symbols produced by a section to increase efficiency of the reduce operations. The group symbols are annotated as gradients rather than the sub-symbols. If you are interested in learning more about how this works, see https://docs.sambanova.ai/developer/latest/data-parallel.html#_what_is_data_parallel[What is Data Parallel].
@@ -470,6 +478,7 @@ We use `torch.distributed`, compiled with MPI support, to handle application lau
 * Performs the gradient averaging by executing bitfiles on the RDU.
 
 Launch data parallel apps with the standard MPI launcher, mpirun, or with another MPI-compliant launcher, such as Slurm. We use the MPICH-3.4.3 MPI library, which is installed as part of SambaFlow. 
+Remember to set `OMP_NUM_THREADS` if there are resource limits and notice we need to set `checkpoint.model_name_or_path` rather than `checkpoint.config_name` to load the checkpoint.
 
 [source,bash]
 ----
@@ -477,7 +486,7 @@ export DATASET=./ultrachat_dialogue;  # or container path to dataset
 export PEF=/path/to/compiled/pef;
 /opt/mpich-3.4.3/bin/mpirun -np <NUM_PROCESSES> python -u rdu_train_llm_dp.py \
     command=run \
-    checkpoint.config_name=${CHECKPOINT} \
+    checkpoint.model_name_or_path=${CHECKPOINT} \
     model.max_seq_length=${MAX_SEQ_LENGTH} \
     samba_run.pef=${PEF} \
     training.dataset=${DATASET}

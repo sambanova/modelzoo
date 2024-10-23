@@ -47,6 +47,7 @@ def get_sn_config_for_generation(model_name_or_path: str,
     Get the model config from the cache directory and transform into SNPretrainedConfig for text generation.
     Args:
         model_name_or_path: Directory that contains the model config file.
+        cache_dir: Original Hugging Face cache directory.
         pad_token_id: Padding token id to overwrite the original model config.
         original_config_overrides: Configs that overrides the original config in the model config file.
         sn_model_args: SambaNova specific SNPretrainedConfig.

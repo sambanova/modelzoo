@@ -2,7 +2,9 @@
 
 The generation example apps illustrate how you can run generation with a model that's been customized for RDU on a SambaNova system. These examples are meant to show how things work and are not intended for use in production.
 
-* `cpu_generate_text.py` — Simple app for running generation on CPU to allow you to compare CPU and RDU. Tested only on Llama-2 7B.
+* `cpu_generate_text.py` — Simple app for running generation on CPU to allow you to compare CPU and RDU. Tested only on Llama-2-7b.
+
+** The CPU app is intended to be used as an example, it is tested only with Llama-2-7b. It is not guaranteed to work outside of the DevBox environment in typical user workflows.
 
 * `rdu_generate_text.py` — Simple app for running generation on RDU with a large language model. This app expects customized model code, like the model code in the `/models` folder.
 
@@ -61,7 +63,7 @@ samba_run.pef=PATH_TO_PEF generation.prompts=['YOUR_PROMPT_HERE']
 
 A separate app `cpu_generate_text.py` demonstrates how to run a Model Zoo model on CPU. This app is mainly intended to allow you to compare the code for RDU and for CPU and to better understand the SambaFlow software stack.
 
-NOTE: Because the CPU app is intended as an example, we've tested it only with Llama 2 7B.
+NOTE: The CPU app is intended to be used as an example, it is tested only with Llama-2-7b. It is not guaranteed to work outside of the DevBox environment in typical user workflows.
 
 
 === Commonalities between RDU and CPU example apps

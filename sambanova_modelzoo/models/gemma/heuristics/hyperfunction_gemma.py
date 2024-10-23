@@ -12,11 +12,90 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import ContextManager
 
-from sambanova_modelzoo.models.llama.heuristics.hyperfunction_llama import (
-    LlamaHyperfunction,
-)
+from sambanova_modelzoo.models.config import SNPretrainedConfig
+from sambanova_modelzoo.models.directives import op_fusion
+from sambanova_modelzoo.models.hyperfunction_for_causal_lm import HyperfunctionForCausalLM
 
 
-class GemmaHyperfunction(LlamaHyperfunction):
-    pass
+class GemmaHyperfunction(HyperfunctionForCausalLM):
+    """
+    This class provides directive context manager for O1 heuristic annotation to define the
+    hyperfunction boundary.
+    """
+    def __init__(self, config: SNPretrainedConfig):
+        super().__init__(config)
+
+    def embedding(self, input_seq_length: int, consume_cache: bool, is_training: bool,
+                  reuse_last_id: bool = False) -> ContextManager:
+        """ Hyperfunction for embedding """
+        if is_training:
+            heuristic = ""
+            plugins = ""
+        else:
+            heuristic_str = "kEmbedding"
+            heuristic = self.MPMD_heuristic(heuristic_str)
+            plugins = ["libEmbeddingPlugins.so"]
+
+        return op_fusion(
+            func_name=f'emb_mask_consume_cache_{consume_cache}_ss_{input_seq_length}_{self.config.model_type}',
+            heuristic=heuristic,
+            heuristic_params={
+                "input_seq_length": input_seq_length,
+                "max_seq_length": self.config.max_seq_length,
+                "consume_cache": consume_cache,
+            },
+            plugins=plugins,
+            reuse_last_id=reuse_last_id,
+            user_annotated=self.config.use_plugin_heuristics)
+
+    def encoder_decoder(self, input_seq_length: int, consume_cache: bool,
+                        reuse_last_id: bool = False) -> ContextManager:
+        """
+        Hyperfunction for encoder/decoder
+        """
+
+        heuristic_str = "kGemma_Encoder"
+        heuristic = self.MPMD_heuristic(heuristic_str)
+        plugins = ["libGemmaEncoderHook.so"]
+        return op_fusion(
+            func_name=f'encoder_consume_cache_{consume_cache}_ss_{input_seq_length}_{self.config.model_type}',
+            heuristic=heuristic,
+            heuristic_params={
+                "input_seq_length": input_seq_length,
+                "max_seq_length": self.config.max_seq_length,
+                "consume_cache": consume_cache,
+                "class_name":
+                self.config.architectures[0].lower() if self.config.architectures else "snllamaforcausallm"
+            },
+            plugins=plugins,
+            reuse_last_id=reuse_last_id,
+            user_annotated=self.config.use_plugin_heuristics)
+
+    def classifier(self, input_seq_length: int, consume_cache: bool, is_training: bool,
+                   reuse_last_id: bool = False) -> ContextManager:
+        """ Hyperfunction for classifier """
+
+        if is_training:
+            heuristic = ""
+            params = None
+            plugins = ""
+        else:
+            heuristic_str = "kGemma_Classifier"
+            heuristic = self.MPMD_heuristic(heuristic_str)
+            params = {
+                "input_seq_length": input_seq_length,
+                "max_seq_length": self.config.max_seq_length,
+                "consume_cache": consume_cache,
+                "class_name":
+                self.config.architectures[0].lower() if self.config.architectures else "snllamaforcausallm"
+            }
+            plugins = ["libGemmaClassifierHook.so"]
+
+        return op_fusion(func_name=f'cls_consume_cache_{consume_cache}_ss_{input_seq_length}_{self.config.model_type}',
+                         heuristic=heuristic,
+                         heuristic_params=params,
+                         plugins=plugins,
+                         reuse_last_id=reuse_last_id,
+                         user_annotated=self.config.use_plugin_heuristics)

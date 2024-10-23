@@ -17,4 +17,4 @@ from transformers import __version__ as transformers_version
 
 
 def is_accepted():
-    return version.parse(transformers_version) >= version.parse('4.38.1')
+    return version.parse(transformers_version) >= version.parse('4.40.0')

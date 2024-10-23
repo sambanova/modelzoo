@@ -71,7 +71,7 @@ Run a Devbox container. Options:
 
   -c: Command to run inside the container. If none is provided, an interactive shell is started.
 
-  -s: Provide a name to your singularity instance. Is not used with podman.
+  -s: Provide a name to your instance.
 
   -u: Run in CPU-only mode. This is useful if you don't have access to a RDU machine.
 

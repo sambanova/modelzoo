@@ -23,6 +23,7 @@ from sambanova_modelzoo.libs.nlp.core.generation.configuration_utils import (con
                                                                              get_config_overrides_for_generation)
 from sambanova_modelzoo.models.configuration_validator import SNAutoConfigValidator
 from sambanova_modelzoo.models.utils import load_model_from_config, load_model_from_pretrained
+from utils.reporting import save_summary_report
 from transformers import AutoTokenizer
 
 import sambaflow.samba as samba
@@ -92,19 +93,23 @@ def run(cfg: RDUGenerationAppConfig):
     completions = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     ttft = samba_profile._get_iter_times('fwd', 0)[0]
     tokens_ex = samba_profile.get_latencies(['fwd'], 1).get('fwd')
-    print(f"Completion:\n{completions}")
-    print("\nlatencies")
-    print(f"    time to first token {ttft:.4f}s")
-    print(f"    tokens,  excluding first token {tokens_ex:.4f}s")
-    print(f"    tokens,  overall {samba_profile.get_latencies(['fwd'], 0).get('fwd'):.4f}s")
-    print(f"    Total Latency {(ttft + (tokens_ex * len(generated_tokens))):.4f}s")
-    print("throughputs")
-    print(
-        f"    tokens/second excluding first token {samba_profile.get_throughputs(['fwd'], cfg.generation.batch_size, 1).get('fwd'):.4f}"
+
+    summary_text = (
+        f"Completion:\n{completions}\n"
+        f"latencies\n"
+        f"    time to first token {ttft:.4f}s\n"
+        f"    tokens,  excluding first token {tokens_ex:.4f}s\n"
+        f"    tokens,  overall {samba_profile.get_latencies(['fwd'], 0).get('fwd'):.4f}s\n"
+        f"    Total Latency {(ttft + (tokens_ex * len(generated_tokens))):.4f}s\n"
+        f"throughputs\n"
+        f"    tokens/second excluding first token {samba_profile.get_throughputs(['fwd'], cfg.generation.batch_size, 1).get('fwd'):.4f}\n"
+        f"    tokens/second overall {samba_profile.get_throughputs(['fwd'], cfg.generation.batch_size, 0).get('fwd'):.4f}\n"
     )
-    print(
-        f"    tokens/second overall {samba_profile.get_throughputs(['fwd'], cfg.generation.batch_size, 0).get('fwd'):.4f}"
-    )
+    print(summary_text)
+    save_summary_report(cfg.generation.output_dir, 'summary.txt', summary_text)
+    print(f'Summary saved at {cfg.generation.output_dir}/summary.txt')
+
+
 
     samba_profile.stop_profile()
 

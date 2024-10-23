@@ -1,4 +1,5 @@
 # Modifications Copyright 2024 by SambaNova Systems, Inc. All rights reserved.
+
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -25,20 +26,24 @@ from abc import ABC
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from sambanova_modelzoo.libs.nlp.core.directives import sdpa_directives
 from sambanova_modelzoo.models.custom_ops import create_3d_attn_mask, triu_fill, upper_triangular_fill
+from sambanova_modelzoo.models.gemma.heuristics.hyperfunction_gemma import GemmaHyperfunction
 from sambanova_modelzoo.models.gemma.configuration_gemma import SNGemmaConfig
+from sambanova_modelzoo.libs.nlp.core.directives import sdpa_directives
 from sambanova_modelzoo.models.modeling_patch_utils import MASK_MIN_VALUE, finfo_float32_min_patch
 from sambanova_modelzoo.models.modeling_utils import (apply_rotary_pos_emb, get_cos_sin_cache, get_position_ids,
-                                     get_sliced_hidden_states, update_kv_cache, GlobalNamedTensor)
+                                     get_sliced_hidden_states, update_kv_cache, TensorCache)
 from sambanova_modelzoo.models.utils import logger_info
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from transformers.activations import ACT2FN
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
+tensor_cache = TensorCache()
+
 """
 This Gemma patch is based off Huggingface with transformers==4.38.1
 
@@ -152,7 +157,7 @@ def gemma_sdpa_switch(q: torch.Tensor,
                       use_gqa: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Switches between different versions of scale dot product attention (SDPA)
-    Description of SDPA can be found in go/flash-attention or go/air-sdpa-mapping
+    ##SN: Description of SDPA can be found in go/flash-attention or go/air-sdpa-mapping
     Args:
         q: Query states, input to sdpa.
         k: Key states, input to sdap.
@@ -197,6 +202,11 @@ def gemma_sdpa_switch(q: torch.Tensor,
             if mixedp_attn:
                 attention_mask = attention_mask.to(torch.float32)
 
+            if is_causal:
+                # TODO: remove as right padding no longer needs attention_mask most of time
+                attention_mask = upper_triangular_fill(attention_mask, MASK_MIN_VALUE, mixedp_attn)
+                is_causal = False
+                
         assert not (is_causal and has_attn_mask), "is_causal and article attention mask are mutually exclusive in sdpa"
 
         with sdpa_directives({
@@ -239,17 +249,27 @@ class GemmaRMSNormPatchNamespace(ABC):
 
 class GemmaRotaryEmbeddingPatchNamespace(ABC):
     @staticmethod
-    def patch_cos_sin_cache(self: "GemmaRotaryEmbedding", max_position_embeddings: int):
-        # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(seq_len=max_position_embeddings,
-                                device=self.inv_freq.device,
-                                dtype=torch.get_default_dtype())
+    def patch_inv_freq(_self: "GemmaRotaryEmbedding"):
+        inv_freq = 1.0 / (_self.base ** (torch.arange(0, _self.dim, 2, dtype=torch.int64).float() / _self.dim))
+        _self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @staticmethod
-    def patch_forward(self, x, seq_len=None):
+    def patch_cos_sin_cache(_self: "GemmaRotaryEmbedding", seq_len, device, dtype):
+        """[SambaNova] cache the sin and cos tensors."""
+        _self.max_seq_len_cached = seq_len
+        t = torch.arange(_self.max_seq_len_cached, device=device, dtype=_self.inv_freq.dtype)
+
+        freqs = torch.einsum("i,j->ij", t, _self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        _self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        _self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
+    @staticmethod
+    def patch_forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+            GemmaRotaryEmbeddingPatchNamespace.patch_cos_sin_cache(self, seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         # [SambaNova] slicing is not performant on RDU, use split instead, see below
         # [TODO] can we have more efficient slicing on RDU ? Because we moved slicing to CPU data preparation, why is slicing is even slower compared to CPU ?
@@ -267,6 +287,17 @@ class GemmaRotaryEmbeddingPatchNamespace(ABC):
         return (
             cos_slice.to(dtype=x.dtype),
             sin_slice.to(dtype=x.dtype),
+        )
+
+
+class GemmaMLPPatchNamespace(ABC):
+    @staticmethod
+    def patch_hidden_act(_self: "GemmaMLP"):
+        from sambanova_modelzoo.models.gemma.modeling_gemma import logger
+        _self.act_fn = ACT2FN["gelu"]
+        logger.warning_once(
+            "JIT does not support the approximate GeLU activation function `gelu_pytorch_tanh`, automatically setting "
+            "activation function to `gelu`."
         )
 
 
@@ -301,6 +332,8 @@ class GemmaAttentionPatchNamespace(ABC):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        # [SambaNova] Integer index tensor of size 1, indicates current token generation position for cached inference
         last_token_index: Optional[torch.Tensor] = None,
         cos: Optional[torch.Tensor] = None,
         sin: Optional[torch.Tensor] = None,
@@ -333,8 +366,8 @@ class GemmaAttentionPatchNamespace(ABC):
                 key_states_padded, value_states_padded = key_states, value_states
                 if self.config.max_seq_length is not None and q_len < self.config.max_seq_length:
                     shape = (bsz, self.num_key_value_heads, self.config.max_seq_length - q_len, self.head_dim)
-                    zero_padding = torch.zeros(shape, dtype=key_states.dtype)
-                    zero_padding = GlobalNamedTensor.convert(zero_padding, f'zero_padding_{shape}')
+                    zero_padding = tensor_cache.get_or_create_zeroes(key=f'zero_padding_{shape}', shape=shape,
+                                                                     dtype=key_states.dtype)
                     key_states_padded = torch.cat((key_states, zero_padding), dim=2)
                     value_states_padded = torch.cat((value_states, zero_padding), dim=2)
                 past_key_value = (key_states_padded, value_states_padded)
@@ -382,6 +415,8 @@ class GemmaDecoderPatchNamespace(ABC):
             past_key_value: Optional[Tuple[torch.Tensor]] = None,
             output_attentions: Optional[bool] = False,
             use_cache: Optional[bool] = False,
+            cache_position: Optional[torch.LongTensor] = None,
+            # [SambaNova] Integer index tensor of size 1, indicates current token generation position for cached inference
             last_token_index: Optional[torch.Tensor] = None,
             cos: Optional[torch.Tensor] = None,
             sin: Optional[torch.Tensor] = None,
@@ -438,10 +473,21 @@ class GemmaDecoderPatchNamespace(ABC):
         return outputs
 
 class SNGemmaModelPatchNamespace(ABC):
-    def patch_fp32_ln(self: "SNGemmaModel", config: SNGemmaConfig):
+    def patch_rotary_emb(_self: "SNGemmaModel", config: SNGemmaConfig):
+        """Initialize the rotary embedding for cached sin/cos"""
+        from sambanova_modelzoo.models.gemma.modeling_gemma import GemmaRotaryEmbedding
+        _self.rotary_emb = GemmaRotaryEmbedding(config.head_dim,
+                                               max_position_embeddings=config.max_position_embeddings,
+                                               base=config.rope_theta)
+
+    def patch_fp32_ln(_self: "SNGemmaModel", config: SNGemmaConfig):
         if not config.fp32_ln:
             raise ValueError('Incorrect config for fp32_ln')
-        self.norm.fp32_ln = True
+        _self.norm.fp32_ln = True
+
+    def patch_hyperfunction(_self: "SNGemmaModel", config: SNGemmaConfig):
+        """For O1 heuristic annotation"""
+        _self.hyperfunction = GemmaHyperfunction(config)
 
     def patch_forward(
             self: "SNGemmaModel",
@@ -454,6 +500,7 @@ class SNGemmaModelPatchNamespace(ABC):
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
+            # [SambaNova] Integer index tensor of size 1, indicates current token generation position for cached inference
             last_token_index: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         # [SambaNova] Sanity check the attention mask.
@@ -482,7 +529,7 @@ class SNGemmaModelPatchNamespace(ABC):
         if past_key_values is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
             assert past_key_values_length == self.config.max_seq_length, \
-                    "max_seq_length must equals the length of past_key_value input in token_gen graph"
+                    "max_seq_length must equal the length of past_key_value input in token_gen graph"
 
         with self.hyperfunction.embedding(seq_length, consume_cache, self.training):
             if position_ids is None:
@@ -510,19 +557,19 @@ class SNGemmaModelPatchNamespace(ABC):
             # normalized
             hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
-            cos, sin = self.rotary_emb(hidden_states, seq_len=max(seq_length, past_key_values_length))
+            cos, sin = self.rotary_emb(hidden_states, position_ids, seq_len=max(seq_length, past_key_values_length))
             cos, sin = get_cos_sin_cache(cos, sin, position_ids)
 
 
             # [SambaNova] In terms of compute graph, the float cast on hidden_states is redundant to the float cast within
-            # the first decoder forward call where the input hidden_states is cast to float again. This redundant cast is 
+            # the first decoder forward call where the input hidden_states is cast to float again. This redundant cast is
             # to ensure O1 plugin heuristics's hyperfunction works for the first decoder.
             # Hyperfunction needs the inputs's metadata (includeing dtype) to be the same across layers to work. Without this
             # cast, the first decoder layer's hidden state input may look like bfloat16 while the rest decoder will always
             # have float. This will cause we compile a different hyperfunction for the first decoder layer which doubles the
             # compilation time and also the doubles the amount of work in heuristics design.
             if self.config.fp32_skip_add:
-                inputs_embeds = inputs_embeds.float()
+                hidden_states = hidden_states.float()
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -606,6 +653,11 @@ class SNGemmaModelPatchNamespace(ABC):
         )
 
 class SNGemmaForCausalLMPatchNamespace(ABC):
+    def patch_hyperfunction(_self: "SNGemmaForCausalLM", config: SNGemmaConfig):
+        """For O1 heuristic annotation"""
+        _self.hyperfunction = GemmaHyperfunction(config)
+        _self.model.hyperfunction = _self.hyperfunction
+
     @staticmethod
     def patch_forward(self: "SNGemmaForCausalLM",
                                    input_ids: torch.LongTensor = None,
@@ -619,6 +671,7 @@ class SNGemmaForCausalLMPatchNamespace(ABC):
                                    output_hidden_states: Optional[bool] = None,
                                    return_dict: Optional[bool] = None,
                                    cache_position: Optional[torch.LongTensor] = None,
+                                   # [SambaNova] Integer index tensor of size 1, indicates current token generation position for cached inference
                                    last_token_index: Optional[torch.Tensor] = None
                                    ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""

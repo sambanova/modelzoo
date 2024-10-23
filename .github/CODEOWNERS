@@ -15,3 +15,4 @@ docs                        @sambanova/sambanova-ci
 .pre-commit-config.yaml     @sambanova/sambanova-ci
 pyproject.toml              @sambanova/sambanova-ci
 setup.cfg                   @sambanova/sambanova-ci
+codecov.yaml                @sambanova/sambanova-ci

@@ -43,8 +43,8 @@ def generate_whitelist_config(model_config: SNPretrainedConfig,
         model_config: The model configuration
         job_config: The job configuration
         output_path: Path of output file
-    Returns: 
-        the whitelist config. 
+    Returns:
+        the whitelist config.
     """
     model_validator = SNAutoConfigValidator.get_model_validator(model_config)
     job_config_keys = model_validator.get_job_config_whitelist_keys()
@@ -83,7 +83,7 @@ def add_whitelist_config(config: Dict[str, Any], whitelist: List[Dict[str, Any]]
     A utility function that adds a configuration to a whitelist.
 
     Args:
-        config: The configuration to add 
+        config: The configuration to add
         whitelist: The whitelist
     """
     def unique_values(data: List[Dict[str, Any]]):
@@ -135,12 +135,12 @@ def merge_whitelist_config(whitelist1: List[Dict[str, Any]],
                            whitelist2: List[Dict[str, Any]],
                            output_path: Optional[str] = None):
     """
-    A utility function that combines two whitelist configurations, 
+    A utility function that combines two whitelist configurations,
     returns the merged whitelist and optionally outputs the merged whitelist
     at the specified output path.
 
     Args:
-        whitelist1: The first whitelist 
+        whitelist1: The first whitelist
         whitelist2: The second whitelist
         output_path: Path of output file
     Returns:
@@ -182,22 +182,22 @@ class SNConfigValidatorPlugin(abc.ABC):
         """
         Returns: A set of keys from the job configuration. These keys will be used to generate a job_config whitelist and validate an input job_config. These keys can be overwritten by the child plugin
         """
-        return set([
+        return {
             "batch_size", "arch", "num_tiles", "run_early_tp", "n_chips", "tensor_parallel", "fp32_ln", "fp32_logits",
             "fp32_skip_add", "mixedp_attn", "max_seq_length", "compiler_mode", "optim_level",
             "enable_mixed_precision_ops", "enable_multi_input_broadcast", "inference", "o1_experimental_opts",
-            "tiling_accum", "use_air_ce", "num_tiles", "all_regions_hbm", "use_o1_default_rules"
-        ])
+            "tiling_accum", "num_tiles", "all_regions_hbm", "use_o1_default_rules"
+        }
 
     def get_model_config_whitelist_keys(self) -> Set[str]:
         """
         Returns: A set of keys from the model configuration. These keys will be used to generate a model_config whitelist and validate an input model_config. These keys can be overwritten by the child plugin.
         """
-        return set([
+        return {
             "architectures", "fp32_ln", "fp32_logits", "fp32_skip_add", "hidden_act", "hidden_size",
             "intermediate_size", "max_position_embeddings", "mixedp_attn", "model_type", "num_attention_heads",
             "num_hidden_layers", "num_key_value_heads", "vocab_size", "use_segmented_softmax_attn"
-        ])
+        }
 
     def _whitelist_path(self) -> str:
         """
@@ -208,7 +208,7 @@ class SNConfigValidatorPlugin(abc.ABC):
 
     def _get_whitelist(self) -> List[Dict[str, Any]]:
         """
-        Returns: A list of allowed config dictionary.
+        Returns: A list of allowed config dictionaries.
         """
         if self.whitelist is None:
             self.whitelist = []
@@ -221,7 +221,7 @@ class SNConfigValidatorPlugin(abc.ABC):
     def _is_whitelist_key_values_match(self, whitelist_config, job_config_dict: Dict[str, Any]):
         """
         Check if the whitelist's keys and values exist and match in job's configurations.
-        
+
         Returns:
             True if all keys and values present in whitelist_config exist and are equal to those in job_config_dict,
             False otherwise.
@@ -257,7 +257,7 @@ class SNConfigValidatorPlugin(abc.ABC):
             whitelist_config_dict: A configuration dictionary from the whitelist
             job_config: The job configuration
         Returns:
-            True if the job config is supported, False otherwise. 
+            True if the job config is supported, False otherwise.
         """
         job_config_dict = job_config.model_dump()
         supported_job_configs = whitelist_config_dict.get("job_configs", {})
@@ -277,7 +277,7 @@ class SNConfigValidatorPlugin(abc.ABC):
             model_config: The model configuration
             whitelist_config_dict: A configuration dictionary from the whitelist
         Returns:
-            True if the model configuration is supported, False otherwise. 
+            True if the model configuration is supported, False otherwise.
         """
         model_config_dict = model_config.to_dict()
         supported_model_config = whitelist_config_dict["sn_config"]
@@ -297,7 +297,7 @@ class SNConfigValidatorPlugin(abc.ABC):
             whitelist_config_dict: A whitelist configuration
 
         Returns:
-            True if the config is supported, False otherwise. 
+            True if the config is supported, False otherwise.
         """
         if not self._is_supported_model_config(whitelist_config_dict, model_config):
             return False

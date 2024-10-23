@@ -14,14 +14,14 @@
 
 # If any questions, contact SambaNova Support at help@sambanovasystems.com
 
-"SambaFlow Compiler": 1.21.1
+"SambaFlow Compiler": 1.23.3
 "SambaFlow Runtime": 1.18.7-38+
 "Architectures":
   - SN30
 "Images":
   "ubuntu20":
-    "docker-repo": ${DOCKER_REGISTRY}/devbox/ubuntu20/sambaflow_1.21.1-5:0.1.0
+    "docker-repo": ${DOCKER_REGISTRY}/devbox/ubuntu20/sambaflow_1.23.3-1:0.2.0
     "container-engine": SingularityCE 3.10.5
   "rhel8_5":
-    "docker-repo": ${DOCKER_REGISTRY}/devbox/rhel8.5/sambaflow_1.21.1-5:0.1.0
+    "docker-repo": ${DOCKER_REGISTRY}/devbox/rhel8.5/sambaflow_1.23.3-1:0.2.0
     "container-engine": Podman 3.4.2

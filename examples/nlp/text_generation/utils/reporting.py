@@ -12,9 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from packaging import version
-from transformers import __version__ as transformers_version
+import csv
+import os
+from typing import Any, Dict, List
 
 
-def is_accepted():
-    return version.parse(transformers_version) >= version.parse('4.43.1')
+def save_summary_report(output_dir: str, filename: str, summary_text: str) -> None:
+    """
+    Save a training summary report
+
+    Args:
+        output_dir: directory to store report
+        summary_text: text to output in summary file
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, filename)
+    with open(output_file, 'w') as out_file:
+        out_file.write(summary_text)

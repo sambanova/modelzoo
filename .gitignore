@@ -154,3 +154,9 @@ docs/source/_autosummary
 # App output
 out
 outputs
+
+#emacs backup
+*~
+
+# docker environmental files
+docker/docker.*.env

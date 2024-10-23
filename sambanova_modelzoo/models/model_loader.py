@@ -46,7 +46,7 @@ class ModelLoaderPlugin(abc.ABC):
         """"
         Args:
             loaders: Model, AutoModel pair that will be registered.
-            config_class: SNConfig for the Models you will register with the AutoModels.
+            config_class: SNConfig for the models you will register with the AutoModels.
         """
         for model, auto_model in loaders.items():
             auto_model.register(config_class, model)
@@ -63,8 +63,10 @@ class ModelLoaderPlugin(abc.ABC):
         """
         Args:
             config
+            # TODO: Need more details
         Returns:
-            True if the config matches the plugin's config type.
+            True if the config matches the plugin's config type. 
+            # TODO: For example? 
         """
         return type(config) is self.get_config_type()
 
@@ -76,7 +78,7 @@ class ModelLoaderPlugin(abc.ABC):
     @abstractmethod
     def get_automodel_map(self) -> Dict[Type[PreTrainedModel], _BaseAutoModelClass]:
         """
-        Returns: Map of sn model to the correct corresponding AutoModel, e.g. SNMistralForCausalLM to AutoCausalLLM.
+        Returns: Mapping of SambaNova model to the correct corresponding AutoModel, e.g. SNMistralForCausalLM to AutoCausalLLM.
         """
 
 
@@ -84,7 +86,7 @@ class ModelLoader:
     def __init__(self, plugins: List[ModelLoaderPlugin] = None):
         """
         Args:
-            plugins: optional, if None then use the registered list of plugins, else use the specified list.
+            plugins: optional, if None, then use the registered list of plugins, else use the specified list.
         """
         super().__init__()
         self._plugins = plugins if plugins is not None else ModelLoaderPlugin.get_registered_plugins()

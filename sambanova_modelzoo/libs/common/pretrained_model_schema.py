@@ -25,7 +25,7 @@ class PretrainedModelConfig(BaseModel):
     These parameters are passed to ConfigurationTransformer().run() when loading a model from ModelZoo.
 
     This list is compiled from the following sources
-        models/config.py - common parameters for all LLMs models
+        models.config.py - common parameters for all LLMs models
         models/<model_type>/configuration_<model_type>.py - additional parameters for specific models
     """
 
@@ -37,7 +37,10 @@ class PretrainedModelConfig(BaseModel):
     mixedp_attn: bool = Field(description="Attention in mixp, see SNPretrainedConfig")
     max_seq_length: PositiveInt = Field(description="Maximum sequence length including prompt and new tokens generated")
     use_plugin_heuristics: bool = Field(description="Enable O1HD heuristics", default=False)
-    use_segmented_softmax_attn: bool = Field(description="SDPA flash-attention, see SNPretrainedConfig", default=False)
+    run_early_tp: bool = Field(description="Make tensor-parallel decisions early", default=False)
+    use_segmented_softmax_attn: bool = Field(description="SDPA, see SNPretrainedConfig", default=False)
+    seg_softmax_block_size: Optional[int] = Field(
+        description="Controls the block size used in segmented softmax attention", default=None)
 
     @property
     def dtype(self) -> Optional[torch.dtype]:

@@ -28,7 +28,7 @@ def is_jit() -> bool:
 
 
 def init_weights(self, module: torch.nn.Module):
-    """Modelzoo init weight function selector between JIT and Samba"""
+    """Model Zoo init weight function selector between JIT and Samba"""
     if is_jit():
         # [TODO] Investigate using LazyModules for init_weights
         std = self.config.initializer_range
@@ -46,7 +46,7 @@ def init_weights(self, module: torch.nn.Module):
 
 
 def logger_info(message: str):
-    """Modelzoo logging function that only prints for Samba"""
+    """Model Zoo logging function that only prints for Samba"""
     if not is_jit():
         from sambaflow.logging import samba_logger
         samba_logger.info(message)

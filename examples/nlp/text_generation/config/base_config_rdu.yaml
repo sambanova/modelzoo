@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+defaults:
+    - nlp_default_args
+    - _self_
 
-# Model configs, changes here is effective only if the PEF is compiled/re-compiled.
+hydra:
+  searchpath: 
+    - pkg://sambanova_modelzoo/libs/nlp/args
+
+# Model configs, changes here are effective only if the PEF is compiled/re-compiled.
 model:
     # Toggle to control the normalization layer precision. True means fp32 and false means bf16.
     fp32_ln: False
@@ -40,6 +47,7 @@ checkpoint:
 command: null
 
 # Compiler configs for PEF optimization and generation.
+# Changes here will only be reflected if the PEF is compiled/re-compiled.
 # NOTE: only need to change arch/output_folder and keep the others as default.
 samba_compile:
     # Required! Target RDU architecture to compile to: sn20, sn30, sn40. 
@@ -48,38 +56,18 @@ samba_compile:
     output_folder: null
     # The name of PEF file. If unspecified, we generate a name that's based on the app, PID, and current time. 
     pef_name: null
-    # Specify `nlp` to optimize models that are based on a transformers architecture. 
-    # No other options are currently supported.
-    compiler_mode: nlp
     # Optimization level, o1 fuses adjacent operators for better performance. 
     # The default O3 uses the full graph optimization scope and compiles more slowly.
     # See https://docs.sambanova.ai/developer/latest/compiler-o1.html for background information. 
     optim_level: o1
-    # The SambaFlow compiler performs blfoat16 computation by default. 
-    # This flag forces operators to be in float32/bfloat16 mixed precision.
-    # See https://docs.sambanova.ai/developer/latest/mixed-precision.html for background information. 
-    enable_mixed_precision_ops:
-        - gemm
-        - softmax
-    # Legacy option. Do not change.
-    enable_multi_input_broadcast: True
     # Whether to compile inference graph only. It should be always True for text generaton tasks.
     inference: True
     # A legacy flag for O1 optimization.
     o1_experimental_opts: True
-    # Accumulation mode for tiling, bf16sr means bf16 inputs with stochastic rounding.
-    tiling_accum: bf16sr
-    # A legacy flag for CrossEntropyLoss.
-    use_air_ce: True
     # An optional path to an operator fusion rules file that specifies the o1 pattern fusion 
     # and heuristis in predefined yaml file format. 
     # See https://docs.sambanova.ai/developer/latest/opfusion-rule-syntax.html
     optimization_rules: null
-    # Number of tiles to be used on chip. If you don't set num_tiles=4 on an SN30 system,
-    # the compiler uses tensor parallel mode, which is not currently supported with Model Zoo. 
-    num_tiles: 4
-    # Enable HBM allocation for sn40
-    all_regions_hbm: True
     # Fuse and map operator subgraphs using predefined o1 default patterns for better hardware utilization
     use_o1_default_rules: True
 
@@ -100,3 +88,4 @@ generation:
     max_new_tokens: 32
     # Random seed for torch, numpy and python library
     seed: 12345
+    output_dir: 'text_gen_telemetry'

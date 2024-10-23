@@ -34,10 +34,13 @@ class LlamaHyperfunction(HyperfunctionForCausalLM):
             heuristic = ""
             plugins = ""
         else:
-            heuristic_str = "kEmbedding"
-            heuristic = self.MPMD_heuristic(heuristic_str)
-            plugins = ["libEmbeddingPlugins.so"]
-
+            if self.config.run_early_tp:
+                heuristic = "kLlama3_Embedding_SPMD"
+                plugins = "libLlama3SPMD_EmbeddingHook.so"
+            else:
+                heuristic_str = "kEmbedding"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libEmbeddingPlugins.so"]
         return op_fusion(
             func_name=f'emb_mask_consume_cache_{consume_cache}_ss_{input_seq_length}_{self.config.model_type}',
             heuristic=heuristic,
@@ -61,25 +64,62 @@ class LlamaHyperfunction(HyperfunctionForCausalLM):
         hidden_size = self.config.hidden_size
         use_sdpa = self.config.use_segmented_softmax_attn
 
-        if (gqa, hidden_size, use_sdpa) == (True, 4096, True):
-            heuristic_str = "kLlama3_8B_Sdpa_Encoder"
-            heuristic = {"distribution": heuristic_str, "tiling": heuristic_str, "mapping": heuristic_str}
-            plugins = ["libLlama3SdpaEncoderHook.so"]
-        elif (gqa, hidden_size, use_sdpa) == (True, 4096, False):
-            heuristic_str = "kLlama3_8B_Encoder"
-            heuristic = self.MPMD_heuristic(heuristic_str)
-            plugins = ["libLlama3EncoderHook.so"]
-        elif (gqa, hidden_size, use_sdpa) == (True, 8192, False):
-            heuristic_str = "kLlama3_70B_Encoder"
-            heuristic = self.MPMD_heuristic(heuristic_str)
-            plugins = ["libLlama3_70bEncoderHook.so"]
-        elif (gqa, ) == (False, ):
-            heuristic_str = "kLlama2_7B_Encoder"
-            heuristic = self.MPMD_heuristic(heuristic_str)
-            plugins = ["libLlama2EncoderHook.so"]
+        if self.config.use_plugin_heuristics:
+            if (gqa, hidden_size, use_sdpa) == (True, 4096, False) and self.config.run_early_tp:
+                heuristic = {
+                    "distribution": "kLlama3_8B_Encoder_SPMD",
+                    "tiling": "kLlama3_Encoder_SPMD",
+                    "mapping": "kLlama3_8B_Encoder_SPMD",
+                    "multi_socket_distribution": "kLlama3_Encoder_SPMD"
+                }
+                plugins = [
+                    "libLlama3SPMD_8B_EncoderMappingHook.so", "libLlama3SPMD_EncoderTilingHook.so",
+                    "libLlama3SPMD_8B_EncoderDistributionHook.so", "libLlama3SPMD_EncoderMultiSocketDistributionHook.so"
+                ]
+            elif (gqa, hidden_size, use_sdpa) == (True, 4096, True):
+                heuristic_str = "kLlama3_8B_Sdpa_Encoder"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libLlama3SdpaEncoderHook.so"]
+            elif (gqa, hidden_size, use_sdpa) == (True, 4096, False):
+                heuristic_str = "kLlama3_8B_Encoder"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libLlama3EncoderHook.so"]
+            elif (gqa, hidden_size, use_sdpa) == (True, 8192, False) and not self.config.run_early_tp:
+                heuristic_str = "kLlama3_70B_Encoder"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libLlama3_70bEncoderHook.so"]
+            elif (gqa, hidden_size, use_sdpa) == (True, 8192, False) and self.config.run_early_tp:
+                heuristic = {
+                    "distribution": "kLlama3_70B_Encoder_SPMD",
+                    "tiling": "kLlama3_Encoder_SPMD",
+                    "mapping": "kLlama3_70B_Encoder_SPMD",
+                    "multi_socket_distribution": "kLlama3_Encoder_SPMD"
+                }
+                plugins = [
+                    "libLlama3SPMD_70B_EncoderMappingHook.so", "libLlama3SPMD_EncoderTilingHook.so",
+                    "libLlama3SPMD_70B_EncoderDistributionHook.so",
+                    "libLlama3SPMD_EncoderMultiSocketDistributionHook.so"
+                ]
+            elif (gqa, hidden_size, use_sdpa) == (True, 7168, False):
+                heuristic_str = "kDeepseek_33B_Encoder"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libDeepseek33BEncoderHook.so"]
+            elif (gqa, hidden_size, use_sdpa) == (True, 7168, True):
+                heuristic_str = "kDeepseek_33B_Sdpa_Encoder"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libDeepseek33BSdpaEncoderHook.so"]
+            elif (gqa, use_sdpa) == (False, False):
+                heuristic_str = "kLlama2_7B_Encoder"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libLlama2EncoderHook.so"]
+            elif (gqa, use_sdpa) == (False, True):
+                heuristic_str = "kLlama2_Sdpa_Encoder"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libLlama2SdpaEncoderHook.so"]
+            else:
+                raise ValueError(f"Cannot find O1HD Encoder Heuristic for config {self.config}")
         else:
             heuristic, plugins = None, None
-            raise ValueError(f"Cannot find O1HD Encoder Heuristic for config {self.config}")
 
         return op_fusion(
             func_name=f'encoder_consume_cache_{consume_cache}_ss_{input_seq_length}_{self.config.model_type}',
@@ -104,8 +144,13 @@ class LlamaHyperfunction(HyperfunctionForCausalLM):
             params = None
             plugins = ""
         else:
-            heuristic_str = "kLlama3_8B_Classifier"
-            heuristic = self.MPMD_heuristic(heuristic_str)
+            if self.config.run_early_tp:
+                heuristic = "kLlama3_Classifier_SPMD"
+                plugins = ["libLlama3SPMD_ClassifierHook.so"]
+            else:
+                heuristic_str = "kLlama3_8B_Classifier"
+                heuristic = self.MPMD_heuristic(heuristic_str)
+                plugins = ["libLlama3ClassifierHook.so"]
             params = {
                 "input_seq_length": input_seq_length,
                 "max_seq_length": self.config.max_seq_length,
@@ -113,7 +158,6 @@ class LlamaHyperfunction(HyperfunctionForCausalLM):
                 "class_name":
                 self.config.architectures[0].lower() if self.config.architectures else "snllamaforcausallm"
             }
-            plugins = ["libLlama3ClassifierHook.so"]
 
         return op_fusion(func_name=f'cls_consume_cache_{consume_cache}_ss_{input_seq_length}_{self.config.model_type}',
                          heuristic=heuristic,
