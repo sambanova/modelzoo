@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, DirectoryPath, Field, FilePath, PositiveInt, model_validator
 from sambanova_modelzoo.libs.common.pretrained_model_schema import PretrainedModelConfig
-from sambanova_modelzoo.libs.common.samba_schema import SambaConfig, ValidatorConfig
+from sambanova_modelzoo.libs.common.samba_schema import SambaConfig
 from typing_extensions import Self
 
 # TODO: Add a brief overview of why this file exists and how it interacts with the config YAML.
@@ -55,7 +55,7 @@ class GenerationConfig(BaseModel):
         return self
 
 
-class RDUGenerationAppConfig(SambaConfig, ValidatorConfig):
+class RDUGenerationAppConfig(SambaConfig):
     """ Config for text generation application including testing purposed flags """
     model_config = ConfigDict(extra='forbid')
 
@@ -79,15 +79,6 @@ class RDUGenerationAppConfig(SambaConfig, ValidatorConfig):
     def validate_static_seq_lengths(self) -> Self:
         """ Generate defaults using max_seq_length """
         return _validate_static_seq_lengths(self)
-
-    @model_validator(mode='after')
-    def use_plugin_heuristics(self) -> Self:
-        """ Ensure the o1hd flag is consistent between model config and samba_compile config """
-        if self.command == 'compile':
-            use_o1hd = self.model.use_plugin_heuristics or self.samba_compile.use_plugin_heuristics
-            self.model.use_plugin_heuristics = use_o1hd
-            self.samba_compile.use_plugin_heuristics = use_o1hd
-        return self
 
     @model_validator(mode='after')
     def profile(self) -> Self:

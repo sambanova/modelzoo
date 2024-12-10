@@ -20,7 +20,7 @@
 # limitations under the License.
 """ PyTorch Gemma model."""
 import math
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Type, Union
 from abc import ABC
 
 import torch
@@ -40,6 +40,7 @@ from transformers.activations import ACT2FN
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.utils import logging
+from sambanova_modelzoo.models.directives import add_aux_tensor
 
 logger = logging.get_logger(__name__)
 tensor_cache = TensorCache()
@@ -114,7 +115,7 @@ def gemma_mha(q: torch.Tensor,
         attention_mask = create_3d_attn_mask(attention_mask, mixedp_attn, 0, MASK_MIN_VALUE)
 
     if is_causal:
-        attn_weights = triu_fill(attn_weights, float('-inf'))
+        attn_weights = triu_fill(attn_weights, MASK_MIN_VALUE)
 
     if attention_mask is not None:
         if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
@@ -485,9 +486,10 @@ class SNGemmaModelPatchNamespace(ABC):
             raise ValueError('Incorrect config for fp32_ln')
         _self.norm.fp32_ln = True
 
-    def patch_hyperfunction(_self: "SNGemmaModel", config: SNGemmaConfig):
+    @staticmethod
+    def patch_hyperfunction(_self: "SNGemmaModel", config: SNGemmaConfig, class_for_name: Type):
         """For O1 heuristic annotation"""
-        _self.hyperfunction = GemmaHyperfunction(config)
+        _self.hyperfunction = GemmaHyperfunction(config, class_for_name)
 
     def patch_forward(
             self: "SNGemmaModel",
@@ -535,7 +537,7 @@ class SNGemmaModelPatchNamespace(ABC):
             if position_ids is None:
                 device = input_ids.device if input_ids is not None else inputs_embeds.device
                 # [SambaNova] generative inference does not need to pass position_ids because we use right padding
-                position_ids = get_position_ids(batch_size, seq_length, last_token_index, device)
+                position_ids = get_position_ids(batch_size, seq_length, last_token_index, device, consume_cache)
 
             if inputs_embeds is None:
                 inputs_embeds = self.embed_tokens(input_ids)
@@ -556,8 +558,13 @@ class SNGemmaModelPatchNamespace(ABC):
 
             # normalized
             hidden_states = hidden_states * (self.config.hidden_size**0.5)
-
-            cos, sin = self.rotary_emb(hidden_states, position_ids, seq_len=max(seq_length, past_key_values_length))
+            seq_len = max(seq_length, past_key_values_length)
+            cos, sin = tensor_cache.get_or_create_tuple(
+                f"cos_sin_tensors_{seq_len}", 
+                lambda: self.rotary_emb(hidden_states, position_ids, seq_len=max(seq_length, past_key_values_length))
+            )
+            add_aux_tensor(cos, f"aux_cos_{seq_len}")
+            add_aux_tensor(sin, f"aux_sin_{seq_len}")
             cos, sin = get_cos_sin_cache(cos, sin, position_ids)
 
 
@@ -653,9 +660,10 @@ class SNGemmaModelPatchNamespace(ABC):
         )
 
 class SNGemmaForCausalLMPatchNamespace(ABC):
-    def patch_hyperfunction(_self: "SNGemmaForCausalLM", config: SNGemmaConfig):
+    @staticmethod
+    def patch_hyperfunction(_self: "SNGemmaForCausalLM", config: SNGemmaConfig, class_for_name: Type):
         """For O1 heuristic annotation"""
-        _self.hyperfunction = GemmaHyperfunction(config)
+        _self.hyperfunction = GemmaHyperfunction(config, class_for_name)
         _self.model.hyperfunction = _self.hyperfunction
 
     @staticmethod

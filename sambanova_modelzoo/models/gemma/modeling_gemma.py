@@ -892,7 +892,7 @@ class SNGemmaModel(GemmaPreTrainedModel):
         description="Set RMSNorm to mixed precision."
     )
     @sn_patch_post_process_self(
-        modification=lambda self, config: SNGemmaModelPatchNamespace.patch_hyperfunction(self, config),
+        modification=lambda self, config: SNGemmaModelPatchNamespace.patch_hyperfunction(self, config, SNGemmaForCausalLM),
         description="Add custom SambaNova hyperfunction annotation for Gemma"
     )
     @sn_patch_post_process_self(
@@ -1125,7 +1125,7 @@ class SNGemmaForCausalLM(GemmaPreTrainedModel, CausalLMGenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     @sn_patch_post_process_self(
-        modification=lambda self, config: SNGemmaForCausalLMPatchNamespace.patch_hyperfunction(self, config),
+        modification=lambda self, config: SNGemmaForCausalLMPatchNamespace.patch_hyperfunction(self, config, SNGemmaForCausalLM),
         description="Add custom SambaNova hyperfunction annotation for Gemma"
     )
     def __init__(self, config):

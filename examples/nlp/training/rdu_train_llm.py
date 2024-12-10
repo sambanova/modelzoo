@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 This file demonstrates how to do the following in a RDU environment:
   1. Load an LLM
@@ -33,24 +32,21 @@ from typing import Dict
 import hydra
 import torch
 from accelerate import init_empty_weights
-from config.schema import CheckpointConfig, PretrainedModelConfig, TrainingConfig
-from config.schema import  RDUTrainingConfig
+from config.schema import CheckpointConfig, PretrainedModelConfig, RDUTrainingConfig, TrainingConfig
 from sambanova_modelzoo.libs.common.arguments import to_pydantic
 from sambanova_modelzoo.libs.common.pef_meta import APP_ARGS_KEY, from_pef_meta_dict, to_pef_meta_dict
 from sambanova_modelzoo.libs.nlp.core.clm_runtime import PretrainRuntime, SambaPretrainInputNames
 from sambanova_modelzoo.libs.nlp.core.clm_tracer import PretrainTracer
 from sambanova_modelzoo.models.configuration_transformer import ConfigurationTransformer
-from sambanova_modelzoo.models.configuration_validator import SNAutoConfigValidator
 from torch.utils.data import DataLoader
-from transformers import AutoConfig, AutoModelForCausalLM, PreTrainedModel, set_seed
+from transformers import AutoConfig, AutoModelForCausalLM, PreTrainedModel
 from utils.checkpoint import save_as_huggingface_checkpoint
 from utils.dataset import HDF5ParallelLoader, get_dataset_metadata
-from utils.reporting import save_per_step_report, save_summary_report
+from utils.reporting import save_summary_report
 
 from sambaflow import samba
 from sambaflow.samba import SambaTensor
 from sambaflow.samba.utils import trace_graph
-from sambaflow.samba.utils import set_seed as set_samba_seed
 from sambaflow.samba.utils.pef_utils import get_pefmeta_dict
 
 
@@ -97,7 +93,10 @@ def load_dataset(training: TrainingConfig, model_seq_length: int) -> DataLoader:
     # ModelZoo LLMs expect data processed using generative_data_prep.
     # Each sample is {'input_ids': List[List[int]], 'token_type_ids': List[List[int]]}
     # For more details on token_type_ids, refer to TODO: article attention docs
-    dataloader = HDF5ParallelLoader(dataset_path, dataset_seq_length, local_batch_size=training.batch_size, drop_last=True)
+    dataloader = HDF5ParallelLoader(dataset_path,
+                                    dataset_seq_length,
+                                    local_batch_size=training.batch_size,
+                                    drop_last=True)
     return dataloader
 
 
@@ -108,8 +107,6 @@ def compile(cfg: RDUTrainingConfig, tracing_inputs: Dict[str, "torch.tensor"], m
     # Get the arguments for the compiler
     compile_dict = cfg.samba_compile.model_dump()
 
-    # Will error out if the input configuration is not supported by SambaNova. Add `job_config.validate_config=False` to bypass this check
-    SNAutoConfigValidator.validate(model_config=model.config, job_config=cfg)
     # Embed some metadata in the PEF.
     # samba_compile metadata is required for `samba.session.setup()` during runtime.
     # But other args (model, checkpoint, training) are purely for convenience
@@ -230,11 +227,11 @@ def main(cfg: RDUTrainingConfig):
         num_batches = len(dataloader)
 
         training_overview = ("\n"
-            f"Number of epochs: {cfg.training.num_epochs}\n"
-            f"Batch size: {cfg.training.batch_size}\n"
-            f"Number of batches (steps): {num_batches:,}\n")
+                             f"Number of epochs: {cfg.training.num_epochs}\n"
+                             f"Batch size: {cfg.training.batch_size}\n"
+                             f"Number of batches (steps): {num_batches:,}\n")
         print(training_overview)
-        
+
         print(f'Starting training for epoch {epoch + 1}...')
         for i, batch in enumerate(dataloader):
             # No need for optimizer.zero_grad() since the optimizer is in the execution graph
@@ -253,15 +250,15 @@ def main(cfg: RDUTrainingConfig):
             loss_tensor.sn_grad = grad_scale
 
             # Forward, backward, and optim happen in a single samba.session.run call
-            outputs = samba.session.run(model_inputs, model_outputs)
+            outputs = samba.session.run(model_inputs, loss_tensor)
 
             # Reduce the loss tensor wrt grad scale to report the mean loss
             loss = samba.to_torch(outputs[0]).float()
             loss *= grad_scale.float()
             avg_step_loss = loss.sum().item()
             print(f'Epoch [{epoch+1}/{cfg.training.num_epochs}], Step [{i+1}/{num_batches}], Loss: {avg_step_loss:.4f}')
-            
-            if i+1 == cfg.training.end_early_at_step:
+
+            if i + 1 == cfg.training.end_early_at_step:
                 break_training = True
                 break
 

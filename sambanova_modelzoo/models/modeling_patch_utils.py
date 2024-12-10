@@ -50,20 +50,31 @@ MASK_MIN_VALUE = -10e10
 @contextmanager
 def finfo_float32_min_patch(val: float = MASK_MIN_VALUE):
     """
-    Within the context, change the torch.finfo(torch.float32).min to a very negative number.
+    Within the context, change the torch.finfo(torch.float32).min to -10e10.
 
     1. Model may call torch.tensor(float32.min) * 0. This gives 0 on both CPU and RDU which meets the IEEE standard.
     2. torch.tensor(float32.min).bfloat16() * 0 = -inf * 0 = NaN on both CPU and RDU which also meets the IEEE standard.
-    3. However, Sambaflow mixed precision compilation support may cast float32 number to bfloat16. 
+    3. However, Sambaflow mixed precision compilation support may cast float32 number to bfloat16.
     The bfloat16 conversion to float32.min results in -inf. Multiplying -if with 0 results in NaNs.
 
     To work with float32/bfloat16 mixed precision mode, this utility can be used when the following criteria apply:
     1. float32.min multipled by zero.
     2. Auto precision casting is enabled during compilation (which happens by default right now).
 
-    Instead, we use a very negative number to replace float32.min. It works statistically fine for mask generation
-    where float32.min is commonly used. The mask gets softmaxed later on so the effects of the value itself 
-    becomes insignificant numerically.
+    Instead, we use -10e10 to replace float32.min. It works statistically fine for mask generation
+    where float32.min is commonly used. The mask gets softmaxed later on so the effects of the value itself
+    becomes insignificant numerically. We also left some rooms on the values here in case user does mask combination by adding them together. bfloat16.min + bfloat16.min can overflow to -inf. In addition to the above concern,
+    -inf mask value is numerically unstable in SDPA due to segmentation of the softmax of continuous -inf that could introduce NaN as well:
+     segmented_softmax([-inf, ..., -inf])
+    = sum_recip_mul(exp(maxbias([-inf, ..., -inf])))
+    = sum_recip_mul(exp([+inf, ..., +inf])) or sum_recip_mul(exp([Nan, ..., Nan])) (implementation dependent, but undesirable in any case)
+    = sum_recip_mul([e^+inf, ..., e^+inf])
+    = sum_recip_mul([+inf, ..., +inf])
+    = [+inf,...,+inf] * recip(sum([+inf,...,+inf]))
+    = [+inf,...,+inf] * recip(+inf)
+    = [+inf,...,+inf] * 0
+    = [+inf,...,+inf] or [Nan, Nan, ...Nan] (implementation dependent, but undesirable in any case)
+
     """
     original_finfo = torch.finfo
     torch.finfo = FinfoPatch(val, original_finfo)

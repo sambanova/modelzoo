@@ -13,12 +13,14 @@
 # limitations under the License.
 
 defaults:
-    - nlp_default_args
+    # Removed temporarily
+    # - nlp_default_args
     - _self_
 
 hydra:
-  searchpath: 
+  searchpath:
     - pkg://sambanova_modelzoo/libs/nlp/args
+    - src/sambanova_modelzoo/libs/nlp/args
 
 # Model configs, changes here are effective only if the PEF is compiled/re-compiled.
 model:
@@ -48,6 +50,7 @@ checkpoint:
 
 training:
     dataset: null
+    # The batch size to compile a static graph. If you change this parameter you have to recompile. 
     batch_size: null
     num_epochs: 1
     learning_rate: 1e-5
@@ -65,9 +68,6 @@ samba_compile:
     arch: null
     # Output folder for the PEF and other artifacts. If null, defaults to the current working directory. 
     output_folder: null
-    # Specify `nlp` to optimize models that are based on a transformers architecture. 
-    # No other options are currently supported.
-    compiler_mode: nlp
     # Optimization level, o1 fuses adjacent operators for better performance.
     # The default O3 uses the full graph optimization scope and compiles more slowly.
     # See https://docs.sambanova.ai/developer/latest/compiler-o1.html for background information. 
@@ -82,6 +82,27 @@ samba_compile:
     enable_distribution_pass: True
     weight_grad_reduce: bf16sr
     enable_safe_stochastic_rounding: True
+    # Compiler optimization mode. Specify `nlp` to optimize models based on a transformers architecture. No other options are currently supported. 
+    compiler_mode: nlp
+    # The SambaFlow compiler performs blfoat16 computation by default. 
+    # This flag forces operators to be in float32/bfloat16 mixed precision.
+    # See https://docs.sambanova.ai/developer/latest/mixed-precision.html for background information. 
+    enable_mixed_precision_ops:
+        - gemm
+        - softmax
+    # Legacy option. Do not change.
+    enable_multi_input_broadcast: True
+    # Accumulation mode for tiling, bf16sr means bf16 inputs with stochastic rounding.
+    tiling_accum: bf16sr
+    # A legacy flag for CrossEntropyLoss.
+    use_air_ce: True
+    # Enable HBM allocation for sn40
+    all_regions_hbm: True
+    # Number of tiles to be used on chip. If you don't set num_tiles=4 on an SN30 system,
+    # the compiler uses tensor parallel mode, which is not currently supported with Model Zoo. 
+    num_tiles: 4
+    # HBM/DRAM auto allocation algorithm
+    hbm_auto_alloc: linear_scan
 
 # Run configs 
 samba_run:

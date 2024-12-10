@@ -1,4 +1,4 @@
-# Copyright 2024 SambaNova Systems, Inc.
+# Copyright 2023-2024 SambaNova Systems, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from contextlib import nullcontext
-from typing import Any, ContextManager, Dict, Optional, Union
+from typing import Any, ContextManager, Dict, List, Optional, Union
 
 import torch
 from sambanova_modelzoo.models.schema import HyperfunctionDirective
@@ -44,6 +44,18 @@ def op_fusion(*args, **kwargs) -> ContextManager:
     if not is_jit():
         from sambaflow.samba.directives import op_fusion as samba_op_fusion
         return samba_op_fusion(*args, **kwargs)
+    return nullcontext()
+
+
+def opfusion_id(ids: Union[str, List[str]]):
+    if not is_jit():
+        # TODO (zijingg) Support list type for opfusion_id
+        assert isinstance(ids, str), f"opfusion_id only supports string type for now, got {type(ids)}"
+        import sambaflow.samba as samba
+        key = 'opfusion_id'
+        # TODO (zijingg) Support appending new ids on top of existing ones
+        assert key not in samba.session._context_directives, f"Appending more opfusion_ids is currently not supported"
+        return samba.session._add_directives({key: ids})
     return nullcontext()
 
 

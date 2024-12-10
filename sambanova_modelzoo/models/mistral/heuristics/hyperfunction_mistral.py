@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import ContextManager
+from typing import ContextManager, Type
 
 from sambanova_modelzoo.models.config import SNPretrainedConfig
 from sambanova_modelzoo.models.directives import op_fusion
@@ -24,8 +24,9 @@ class MistralHyperfunction(HyperfunctionForCausalLM):
     This class provides directive context manager for O1 heuristic annotation to define the
     hyperfunction boundary.
     """
-    def __init__(self, config: SNPretrainedConfig):
+    def __init__(self, config: SNPretrainedConfig, class_for_name: Type):
         super().__init__(config)
+        self.class_name = class_for_name.__name__.lower()
 
     def embedding(self, input_seq_length: int, consume_cache: bool, is_training: bool,
                   reuse_last_id: bool = False) -> ContextManager:
@@ -44,8 +45,6 @@ class MistralHyperfunction(HyperfunctionForCausalLM):
             heuristic_params={
                 "input_seq_length": input_seq_length,
                 "max_seq_length": self.config.max_seq_length,
-                "class_name":
-                self.config.architectures[0].lower() if self.config.architectures else "snmistralforcausallm",
                 "consume_cache": consume_cache,
             },
             plugins=plugins,
@@ -75,9 +74,9 @@ class MistralHyperfunction(HyperfunctionForCausalLM):
             heuristic_params={
                 "input_seq_length": input_seq_length,
                 "max_seq_length": self.config.max_seq_length,
-                "class_name":
-                self.config.architectures[0].lower() if self.config.architectures else "snmistralforcausallm",
+                "class_name": self.class_name,
                 "consume_cache": consume_cache,
+                "has_classifier_layer": self.config.has_classifier_layer
             },
             plugins=[
                 "libLlama3SdpaEncoderHook.so", "libMistralEncoderDistribution.so", "libMistralEncoderTiling.so",
@@ -90,7 +89,7 @@ class MistralHyperfunction(HyperfunctionForCausalLM):
                    reuse_last_id: bool = False) -> ContextManager:
         """ Hyperfunction for classifier """
 
-        if is_training:
+        if is_training or not self.config.has_classifier_layer:
             heuristic = ""
             params = None
             plugins = ""
@@ -103,8 +102,6 @@ class MistralHyperfunction(HyperfunctionForCausalLM):
             params = {
                 "input_seq_length": input_seq_length,
                 "max_seq_length": self.config.max_seq_length,
-                "class_name":
-                self.config.architectures[0].lower() if self.config.architectures else "snmistralforcausallm",
                 "consume_cache": consume_cache,
             }
             plugins = [

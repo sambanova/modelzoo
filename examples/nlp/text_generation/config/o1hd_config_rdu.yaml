@@ -21,7 +21,6 @@ hydra:
   searchpath: 
     - pkg://sambanova_modelzoo/libs/nlp/args
     - src/sambanova_modelzoo/libs/nlp/args
-
 # Model configs, changes here are effective only if the PEF is compiled/re-compiled.
 model:
     # Toggle to control the normalization layer precision. True means fp32 and false means bf16.
@@ -39,7 +38,12 @@ model:
     # The max number of tokens that the RDU graph can generate minus the input length.
     # The sequence length includes the input prompts and the generated tokens. 
     # At runtime, the length of input prompts must be smaller than max sequence length.
+    # Set in the command line for o1hd run for longer seq lengths.
     max_seq_length: 4096
+    #
+    # Flags needed for o1hd models
+    run_early_tp: True
+    use_plugin_heuristics: True
 
 checkpoint:
     # Path to the downloaded Hugging Face cache, including checkpoints, model config and tokenizer.
@@ -64,24 +68,13 @@ samba_compile:
     optim_level: o1
     # Whether to compile inference graph only. It should be always True for text generaton tasks.
     inference: True
-    # A legacy flag for O1 optimization.
-    o1_experimental_opts: True
-    # An optional path to an operator fusion rules file that specifies the o1 pattern fusion 
-    # and heuristis in predefined yaml file format. 
-    # See https://docs.sambanova.ai/developer/latest/opfusion-rule-syntax.html
-    optimization_rules: null
-    # Fuse and map operator subgraphs using predefined o1 default patterns for better hardware utilization
-    use_o1_default_rules: True
-    # Compiler optimization mode. Specify `nlp` to optimize models based on a transformers architecture. No other options are currently supported. 
-    compiler_mode: nlp
+    #
     # The SambaFlow compiler performs blfoat16 computation by default. 
     # This flag forces operators to be in float32/bfloat16 mixed precision.
     # See https://docs.sambanova.ai/developer/latest/mixed-precision.html for background information. 
     enable_mixed_precision_ops:
         - gemm
         - softmax
-    # Legacy option. Do not change.
-    enable_multi_input_broadcast: True
     # Accumulation mode for tiling, bf16sr means bf16 inputs with stochastic rounding.
     tiling_accum: bf16sr
     # A legacy flag for CrossEntropyLoss.
@@ -93,9 +86,29 @@ samba_compile:
     num_tiles: 4
     # HBM/DRAM auto allocation algorithm
     hbm_auto_alloc: linear_scan
-    # nummber of chips for TP execution
-    n_chips: 1
-
+    # number of chips for TP execution
+    n_chips: 8
+    # o1hd: enable early_tp
+    run_early_tp: True
+    # o1hd: compiler configs file
+    compiler_configs_file: /opt/software/sambaflow/apps/modelzoo/examples/nlp/text_generation/config/o1hd_config.json
+    # o1hd flag
+    optimize_concat_split: True
+    # o1hd flag
+    enable_distribution_pass: True
+    # o1hd: specify resource scaling 
+    resources_scaling_factors:
+        - "4"
+        - "4"
+        - "4"
+    # o1hd: pcu scaling 
+    enable_pcu_scaling: True
+    # o1hd flag 
+    skip_pnr_aware: True
+    # o1hd: enable section looping 
+    loop_conversion: True
+    # o1hd flag
+    enable_coe: True
 
 # Generation runtime configs
 samba_run:
@@ -113,6 +126,9 @@ generation:
     # batch_size of 1. For larger batch_size, user must add additional prompts.
     prompts:
         - 'Once upon a time'
+    #   - 'This is a good story'
+    #   - 'I would like to discuss'
+    #   - 'Yesterday, when I as walking'
     # Maximum tokens to be generated. By default (max_seq_length - prompt_length) tokens.
     max_new_tokens: 32
     # Random seed for torch, numpy and python library

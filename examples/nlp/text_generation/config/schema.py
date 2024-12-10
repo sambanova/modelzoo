@@ -17,7 +17,7 @@ from typing import List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 from sambanova_modelzoo.libs.common.common_schema import CheckpointConfig
 from sambanova_modelzoo.libs.common.pretrained_model_schema import PretrainedModelConfig
-from sambanova_modelzoo.libs.common.samba_schema import SambaConfig, ValidatorConfig
+from sambanova_modelzoo.libs.common.samba_schema import SambaConfig
 from typing_extensions import Self
 
 
@@ -33,8 +33,7 @@ class GenerationConfig(BaseModel):
     output_dir: str = Field(default='text_gen_telemetry', description="Path to folder to save text_gen telemetry")
 
 
-
-class RDUGenerationAppConfig(SambaConfig, ValidatorConfig):
+class RDUGenerationAppConfig(SambaConfig):
     model_config = ConfigDict(extra='forbid')
     model: PretrainedModelConfig = Field('Model specific arguments')
     generation: GenerationConfig = Field('Application specific arguments')

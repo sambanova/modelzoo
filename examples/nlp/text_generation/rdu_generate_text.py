@@ -21,10 +21,9 @@ from sambanova_modelzoo.libs.common.arguments import to_pydantic
 from sambanova_modelzoo.libs.nlp.core.generation.cached_inference_compiler import CachedInferenceCompiler
 from sambanova_modelzoo.libs.nlp.core.generation.configuration_utils import (configure_pad_token,
                                                                              get_config_overrides_for_generation)
-from sambanova_modelzoo.models.configuration_validator import SNAutoConfigValidator
 from sambanova_modelzoo.models.utils import load_model_from_config, load_model_from_pretrained
-from utils.reporting import save_summary_report
 from transformers import AutoTokenizer
+from utils.reporting import save_summary_report
 
 import sambaflow.samba as samba
 from sambaflow.samba.profiler import Profiler
@@ -41,8 +40,6 @@ def compile(cfg: RDUGenerationAppConfig) -> str:
     original_config_overrides = get_config_overrides_for_generation()
     with init_empty_weights():
         sn_model = load_model_from_config(cfg.checkpoint.model_name_or_path, cfg.model, original_config_overrides)
-    # Will error out if the input configuration is not supported by SambaNova. Add `job_config.validate_config=False` to bypass this check
-    SNAutoConfigValidator.validate(model_config=sn_model.config, job_config=cfg)
     sn_model.eval()
     compiler = CachedInferenceCompiler(sn_model, cfg.generation.batch_size, set(cfg.generation.static_seq_lengths))
     return compiler.compile(cfg=cfg.samba_compile.model_dump())
@@ -108,8 +105,6 @@ def run(cfg: RDUGenerationAppConfig):
     print(summary_text)
     save_summary_report(cfg.generation.output_dir, 'summary.txt', summary_text)
     print(f'Summary saved at {cfg.generation.output_dir}/summary.txt')
-
-
 
     samba_profile.stop_profile()
 

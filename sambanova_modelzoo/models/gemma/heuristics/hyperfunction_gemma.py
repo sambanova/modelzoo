@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import ContextManager
+from typing import ContextManager, Type
 
 from sambanova_modelzoo.models.config import SNPretrainedConfig
 from sambanova_modelzoo.models.directives import op_fusion
@@ -24,8 +24,9 @@ class GemmaHyperfunction(HyperfunctionForCausalLM):
     This class provides directive context manager for O1 heuristic annotation to define the
     hyperfunction boundary.
     """
-    def __init__(self, config: SNPretrainedConfig):
+    def __init__(self, config: SNPretrainedConfig, class_for_name: Type):
         super().__init__(config)
+        self.class_name = class_for_name.__name__.lower()
 
     def embedding(self, input_seq_length: int, consume_cache: bool, is_training: bool,
                   reuse_last_id: bool = False) -> ContextManager:
@@ -66,8 +67,7 @@ class GemmaHyperfunction(HyperfunctionForCausalLM):
                 "input_seq_length": input_seq_length,
                 "max_seq_length": self.config.max_seq_length,
                 "consume_cache": consume_cache,
-                "class_name":
-                self.config.architectures[0].lower() if self.config.architectures else "snllamaforcausallm"
+                "class_name": self.class_name,
             },
             plugins=plugins,
             reuse_last_id=reuse_last_id,
@@ -88,8 +88,7 @@ class GemmaHyperfunction(HyperfunctionForCausalLM):
                 "input_seq_length": input_seq_length,
                 "max_seq_length": self.config.max_seq_length,
                 "consume_cache": consume_cache,
-                "class_name":
-                self.config.architectures[0].lower() if self.config.architectures else "snllamaforcausallm"
+                "class_name": self.class_name
             }
             plugins = ["libGemmaClassifierHook.so"]
 

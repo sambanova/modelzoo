@@ -17,7 +17,7 @@ from typing import Callable, Dict, Optional, Tuple, Union
 
 import torch
 from sambanova_modelzoo.models.custom_ops import Tensor
-from sambanova_modelzoo.models.directives import add_directives
+from sambanova_modelzoo.models.directives import opfusion_id
 
 from .custom_ops import gather, scatter
 
@@ -110,14 +110,15 @@ def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, si
     assert list(position_ids.shape) in [[bs, cur_seq_len], [1, cur_seq_len]],\
             f"position_ids should be of shape {[bs, cur_seq_len]} or {[1, cur_seq_len]}, got {position_ids.shape} instead"
 
-    with add_directives({'opfusion_id': 'qk_embed'}):
+    with opfusion_id('q_rope'):
         q_embed = (q * cos) + (rotate_half(q) * sin)
+    with opfusion_id('k_rope'):
         k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
-def get_position_ids(batch_size: int, input_seq_length: int, last_token_index: torch.Tensor,
-                     device: torch.device) -> torch.Tensor:
+def get_position_ids(batch_size: int, input_seq_length: int, last_token_index: torch.Tensor, device: torch.device,
+                     consume_cache: bool) -> torch.Tensor:
     """
     For better performance, SambaNova's stack uses a static graph which requires a fixed sequence length.
     So padding is always needed to satisfy the fixed sequence length with only one exception: sequence length of 1.
@@ -134,14 +135,17 @@ def get_position_ids(batch_size: int, input_seq_length: int, last_token_index: t
         last_token_index: The actual position of the last token. For cached inference's continuous token generation,
         it corresponds to the real position of the input token considering all previously generated tokens and prompts.
         It has a shape of (batch_size,).
+        consume_cache: Flag to determine if the function is being called when kv cache has already been generated.
 
     Returns:
         position_ids of shape (batch_size, input_seq_length)
     """
-    if last_token_index is not None:
-        assert list(last_token_index.shape) == [batch_size, 1], 'last_token_index must be of shape (batch_size, 1)'
-
-    if input_seq_length == 1:
+    if consume_cache:
+        assert len(last_token_index.shape) == 2, (
+            f"Expected last_token_index to be a 2D tensor, but got {len(last_token_index.shape)}D instead.")
+        assert last_token_index.shape[0] == batch_size, (
+            f"Expected last_token_index to have batch size {batch_size} in its first dimension, "
+            f"but got {last_token_index.shape[0]} instead.")
         position_ids = last_token_index
     else:
         # [SambaNova] Because only right padding is supported,  we can always prepopulate position_ids
@@ -162,14 +166,14 @@ def get_sliced_hidden_states(hidden_states: torch.Tensor, last_token_index: torc
         It has a shape of (batch_size,).
 
     Returns:
-        Sliced hidden states of size (batch_size, 1, dim)
+        Sliced hidden states of size (batch_size, token_gen_seq_len, dim)
     """
     assert len(hidden_states.shape) == 3,\
             f"hidden states 3D of shape [batch_size, seq_len, dim] but got {hidden_states.shape}"
-    assert list(last_token_index.shape) == [hidden_states.shape[0], 1],\
-            f"last_token_index must be of shape {[hidden_states.shape[0], 1]} but got {last_token_index.shape}"
-    with add_directives({'opfusion_id': 'unsqueeze'}):
-        last_token_index = last_token_index.unsqueeze(1)
+    assert len(last_token_index.shape) == 2 and last_token_index.shape[0] == hidden_states.shape[0],\
+        f"last_token_index must have two dimensions and its first dimension must match hidden_states' first dimension, but got {last_token_index.shape} and {hidden_states.shape}"
+    with opfusion_id('unsqueeze'):
+        last_token_index = last_token_index.unsqueeze(-1)
     # [SambaNova] using gather is often more efficient than doing slicing
     hidden_states = gather(hidden_states, last_token_index, [0], [1], batched_dims=1)
     # [SambaNova] gather will introduce a dummy dimension on the gathering dim, squeeze it out
@@ -184,11 +188,11 @@ def update_kv_cache(key_cache: torch.Tensor, value_cache: torch.Tensor, current_
     The key value caches are of static sequence length.
 
     Args:
-        key_cache: Past key cache, of shape (batch_size, num_heads, max_seq_length, head_dim)
-        value_cache: Past value cache, of shape (batch_size, num_heads, max_seq_length, head_dim)
-        current_key: Current key states, of shape (batch_size, num_heads, 1, head_dim)
-        current_value: Current key value, of shape (batch_size, num_heads, 1, head_dim)
-        last_token_index: The position to update the current key/value, of shape (batch_size)
+        key_cache: Past key cache, of shape (batch_size, num_heads, max_seq_length, head_dim) 
+        value_cache: Past value cache, of shape (batch_size, num_heads, max_seq_length, head_dim) 
+        current_key: Current key states, of shape (batch_size, num_heads, token_gen_graph_input_length, head_dim)
+        current_value: Current value states, of shape (batch_size, num_heads, token_gen_graph_input_length, head_dim)
+        last_token_index: The position to update the current key/value, of shape (batch_size, token_gen_graph_input_length)
     Returns:
         Updated key and value cache.
 
@@ -201,15 +205,21 @@ def update_kv_cache(key_cache: torch.Tensor, value_cache: torch.Tensor, current_
     assert list(current_key.shape) == [cache_shape[0], cache_shape[1], current_key.shape[2], cache_shape[3]],\
             'current_key must be of shape (batch_size, num_heads, token_gen_seq_length, head_dim)'
     assert current_value.shape == current_key.shape, 'current_value must be the same shape as current key'
-    assert list(last_token_index.shape) == [cache_shape[0], 1], 'last_token_index must be of shape (batch_size, 1)'
-    with add_directives({'opfusion_id': 'kv_cache_last_token_index_unsqueeze'}):
-        last_token_index = last_token_index.unsqueeze(1)
-    current_key = current_key.unsqueeze(1)
-    current_value = current_value.unsqueeze(1)
+    assert list(last_token_index.shape) == [cache_shape[0], current_key.shape[2]
+                                            ], 'last_token_index must be of shape (batch_size, token_gen_seq_length)'
 
-    with add_directives({'opfusion_id': 'scatter'}):
+    with opfusion_id('kv_cache_last_token_index_unsqueeze'):
+        last_token_index = last_token_index.unsqueeze(-1)
+    current_key = current_key.permute([0, 2, 1, 3]).unsqueeze(-2)
+    current_value = current_value.permute([0, 2, 1, 3]).unsqueeze(-2)
+
+    with opfusion_id('scatter'):
         key_cache = scatter(key_cache, current_key, start_indices=last_token_index, scatter_dims=[1], batched_dims=1)
-        value_cache = scatter(value_cache, current_value, start_indices=last_token_index, scatter_dims=[1], batched_dims=1)
+        value_cache = scatter(value_cache,
+                              current_value,
+                              start_indices=last_token_index,
+                              scatter_dims=[1],
+                              batched_dims=1)
 
     return key_cache, value_cache
 

@@ -14,10 +14,9 @@
 
 from typing import Dict, Type
 
-from sambanova_modelzoo.libs.nlp.core.clm_runtime import CachedInferenceRuntime
+from sambanova_modelzoo.libs.nlp.core.clm_runtime import CachedInferenceRuntime, InferenceRuntime
 from sambanova_modelzoo.models.config import SNPretrainedConfig
 from sambanova_modelzoo.models.configuration_transformer import ConfigurationTransformerPlugin
-from sambanova_modelzoo.models.configuration_validator import SNConfigValidatorPlugin
 from sambanova_modelzoo.models.mistral.configuration_mistral import SNMistralConfig
 from sambanova_modelzoo.models.mistral.modeling_mistral import SNMistralForCausalLM, SNMistralModel
 from sambanova_modelzoo.models.model_loader import ModelLoaderPlugin
@@ -35,15 +34,7 @@ class MistralConfigurationTransformer(ConfigurationTransformerPlugin):
         return SNMistralConfig
 
     def get_architectures_transform_map(self) -> Dict[Type[PreTrainedModel], Type[PreTrainedModel]]:
-        return {
-            MistralForCausalLM: SNMistralForCausalLM,
-            MistralModel: SNMistralModel
-        }
-
-
-class MistralConfigValidator(SNConfigValidatorPlugin):
-    def get_config_type(self) -> Type[SNPretrainedConfig]:
-        return SNMistralConfig
+        return {MistralForCausalLM: SNMistralForCausalLM, MistralModel: SNMistralModel}
 
 
 class MistralModelLoaderPlugin(ModelLoaderPlugin):
@@ -58,4 +49,8 @@ class MistralModelLoaderPlugin(ModelLoaderPlugin):
 
 
 class MistralRuntime(CachedInferenceRuntime, model=SNMistralForCausalLM):
+    pass
+
+
+class MistralModelRuntime(InferenceRuntime, model=SNMistralModel):
     pass

@@ -15,7 +15,7 @@
 from typing import Dict, Optional, Set, Tuple
 
 import torch
-from sambanova_modelzoo.libs.nlp.core.generation.postprocess import (CausalModelWithSampling, PostprocessWithSampling)
+from sambanova_modelzoo.libs.nlp.core.generation.postprocess import CausalModelWithSampling, PostprocessWithSampling
 from sambanova_modelzoo.libs.nlp.core.generation.sampling import SamplingMethod, SamplingModule
 
 import sambaflow.samba as samba
@@ -29,11 +29,16 @@ from .cached_inference_compiler import CachedInferenceCompiler
 
 
 class FusedLMHeadCompiler(CachedInferenceCompiler):
-    def __init__(self, model: torch.nn.Module, batch_size: int, static_seq_lengths: Optional[Set[int]] = None):
+    def __init__(
+            self,
+            model: torch.nn.Module,
+            batch_size: int,
+            static_seq_lengths: Optional[Set[int]] = None,
+    ):
         """
         A multigraph compiler to stitch the cache_gen graph and token_gen graphs to run efficient inference. All model
         weights are shared. In addition, KV cache tensors also shared memory between models.
-        This class differs from CachedInferenceCompiler. Here the lm_head is already in its standalone graph schedule.
+        This class differs from CachedInferenceCompiler. Here, the lm_head is already in its standalone graph schedule.
         # TODO: Why schedule?
         In addition, each sampling module can decide whether to fuse with lm_head for performance.
 
@@ -80,6 +85,7 @@ class FusedLMHeadCompiler(CachedInferenceCompiler):
                     "last_token_index": self.trace_input_gen.get_last_token_index(),
                     "attention_mask": self.trace_input_gen.get_attention_mask(),
                     "generated_tokens": self.trace_input_gen.get_generated_tokens(),
+                    "generated_tokens_streaming": self.trace_input_gen.get_generated_tokens_streaming(),
                     "generated_index": self.trace_input_gen.get_generated_index(),
                     "repetition_penalty": self.trace_input_gen.get_repetition_penalty(),
                     'token_count': self.trace_input_gen.get_token_count(),
@@ -94,7 +100,7 @@ class FusedLMHeadCompiler(CachedInferenceCompiler):
                 outputs = trace_multigraph(module, inputs, trace_prefix=self.graph_names.postprocess(sampling_method))
                 self.lm_model_with_sampling_inputs[sampling_method] = inputs
                 self.lm_model_with_sampling_outputs[sampling_method] = outputs
-                # discard the last_hidden_states to be used for inplace connections
+                # discard the last_hidden_states to be used for inplace postprocess connections
                 self.fused_postprocess_outputs[sampling_method] = outputs[:-1]
 
     def _connect_postprocess_graphs(self):
@@ -114,10 +120,10 @@ class FusedLMHeadCompiler(CachedInferenceCompiler):
 
         # cache_gen
         for cache_gen_outputs in self.cache_gen_outputs.values():
-            hidden_states = self.trace_input_gen.get_last_hidden_states_output(cache_gen_outputs)
+            hidden_states = self.trace_input_gen.get_last_hidden_states_output(cache_gen_outputs=cache_gen_outputs)
             hidden_states.sn_region_name = self.input_names.last_hidden_states
         # token_gen
-        hidden_states = self.trace_input_gen.get_last_hidden_states_output(self.token_gen_outputs)
+        hidden_states = self.trace_input_gen.get_last_hidden_states_output(token_gen_outputs=self.token_gen_outputs)
         hidden_states.sn_region_name = self.input_names.last_hidden_states
 
         # postprocessing fused with lm_head
@@ -150,14 +156,15 @@ class FusedLMHeadCompiler(CachedInferenceCompiler):
         # cache gen graphs without lm_head
         for seq_length in self.static_seq_lengths:
             cache_gen_outputs = self.cache_gen_outputs[seq_length]
-            last_hidden_states = self.trace_input_gen.get_last_hidden_states_output(cache_gen_outputs)
+            last_hidden_states = self.trace_input_gen.get_last_hidden_states_output(cache_gen_outputs=cache_gen_outputs)
             kvs = self.trace_input_gen._get_kv_cache(cache_gen_outputs)
             samba.session.add_graph(
                 FwdGraph(self.cache_gen_inputs[seq_length], (last_hidden_states, kvs),
                          name=self.graph_names.cache_gen(seq_length)))
 
         # token gen graph without lm_head
-        last_hidden_states = self.trace_input_gen.get_last_hidden_states_output(self.token_gen_outputs)
+        last_hidden_states = self.trace_input_gen.get_last_hidden_states_output(
+            token_gen_outputs=self.token_gen_outputs)
         kvs = self.trace_input_gen._get_kv_cache(self.token_gen_outputs)
         samba.session.add_graph(
             FwdGraph(self.token_gen_inputs, (last_hidden_states, kvs),
@@ -179,4 +186,3 @@ class FusedLMHeadCompiler(CachedInferenceCompiler):
                 FwdGraph(fused_postprocess_inputs,
                          self.fused_postprocess_outputs[sampling_method],
                          name=self.graph_names.postprocess(sampling_method)))
-

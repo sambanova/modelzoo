@@ -37,13 +37,3 @@ class SambaConfig(BaseModel):
         elif data['command'] == 'run' and 'samba_compile' in data:
             del data['samba_compile']
         return data
-
-
-class ValidatorConfig(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    validate_config: bool = Field(
-        description=
-        "Specifies whether the program should continue execution without performing configuration validations for compilation, even though failure is possible.",
-        default=True)
-    generate_whitelist_config: bool = Field(
-        description="Whether to output whitelist.json for the config in the output folder", default=False)

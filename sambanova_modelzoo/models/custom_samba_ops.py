@@ -1,4 +1,4 @@
-# Copyright 2024 SambaNova Systems, Inc.
+# Copyright 2023-2024 SambaNova Systems, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ from typing import Tuple
 import torch
 from sambanova_modelzoo.models.modeling_patch_utils import MASK_MIN_VALUE
 
+import sambaflow
 from sambaflow.samba.functional.stir import sn_imm, sn_iteridx, sn_select, sn_zipmapreduce
 from sambaflow.samba.utils import SNType
 
@@ -33,10 +34,10 @@ def create_3d_attn_mask(
         ignore_value: float = 0.0,
 ) -> torch.Tensor:
     """Create the full 3D article attention mask from the collapsed representation of the attention mask.
-    3D masking uses on-chip mask generation to speed up performance. In order to use 3D masking, we expect the user 
+    3D masking uses on-chip mask generation to speed up performance. In order to use 3D masking, we expect the user
     1) collapses multiple articles into a long one for inputs 2) uses causual attentions instead of attenting future
     tokens.
-    
+
     We create the 3D article attention mask in the model from the collapsed representation (instead of
     directly passing the full 3D attention mask) because the 3D attention mask becomes too big for long sequences.
     For an 8k sequence size, the 3D attention mask is size [batch_size, 8k, 8k]. The collapsed representation is
@@ -55,12 +56,12 @@ def create_3d_attn_mask(
     0 0 0 0 1 1 0
     0 0 0 0 0 0 0
 
-    A `1` at position (i,j) means the ith token should attend to the jth token, and a `0` at that position would mean 
+    A `1` at position (i,j) means the ith token should attend to the jth token, and a `0` at that position would mean
     that the ith token should ignore the jth token during attention.
 
     To construct this, our collapsed attention masks are two tensors which look like:
     mask_1 = [1 1 1 0 2 2 0] and mask_2 = [1 1 1 -1 2 2 -1]. Also, we set ignore_value = 0 and attend_value = 1
-    to set the values in the mask. After doing mask_1 == mask_2.t() (broadcast equal)  
+    to set the values in the mask. After doing mask_1 == mask_2.t() (broadcast equal)
     we get:
     1 1 1 0 0 0 0
     1 1 1 0 0 0 0
@@ -76,7 +77,7 @@ def create_3d_attn_mask(
         attention_mask_collapsed: The collapsed representation of the 3D attention mask.
         mixedp_attn: Flag controlling the dtype of the output mask. FP32 if True, BF16 if False.
         attend_value: The value at positions in the mask where attention is wanted.
-        ignore_value: The value at positions in the mask where attention is ignored. 
+        ignore_value: The value at positions in the mask where attention is ignored.
 
     Returns:
         The full size 3D attention mask of shape [batch_size, 1, sequence_length, sequence_length]
@@ -96,11 +97,11 @@ def create_3d_attn_mask(
 def upper_triangular_fill(x, fill_value=-10e10, mixedp_attn=False):
     """Fills upper triangle tensor (excluding main diagonal) with fill_value.
     Commonly used to do causal masking.
-    
+
     Assumes 4D tensor. Diagonal viewed from dim 2 and 3.
     - If `mixedp_attn` is False, filled value will be in bf16.
     - If `mixedp_attn` is True, filled value will be in fp32.
-    
+
     Restriction:
     When `mixedp_attn=False`, size of dim 2 and 3 of `x` should not be larger than 2**16.
     When `mixedp_attn=True`, size of dim 2 and 3 of `x` should not be larger than 2**31.
@@ -108,6 +109,10 @@ def upper_triangular_fill(x, fill_value=-10e10, mixedp_attn=False):
 
     imm_type = torch.float32 if mixedp_attn else torch.bfloat16
     idx_type = SNType.INT32 if mixedp_attn else SNType.UINT16
+
+    if not sambaflow.samba.session.use_static_functional():
+        # for torch-in/torch-out behavior
+        idx_type = SNType.to_torch_reference_type(idx_type)
 
     def triu_fill(attrs, x):
         dim_l = sn_iteridx(dim=2, attrs=attrs, dtype=idx_type)
@@ -138,6 +143,10 @@ def sliding_window_fill(x: torch.Tensor,
     assert len(x.shape) == 4
     imm_type = torch.float32 if mixedp_attn else torch.bfloat16
     idx_type = SNType.INT32 if mixedp_attn else SNType.UINT16
+
+    if not sambaflow.samba.session.use_static_functional():
+        # for torch-in/torch-out behavior
+        idx_type = SNType.to_torch_reference_type(idx_type)
 
     def sliding_window_fill(attrs, x):
         dim_l = sn_iteridx(dim=2, attrs=attrs, dtype=idx_type)

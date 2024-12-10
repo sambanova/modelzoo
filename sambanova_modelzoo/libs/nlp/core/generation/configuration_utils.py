@@ -51,7 +51,6 @@ def get_sn_config_for_generation(model_name_or_path: str,
         pad_token_id: Padding token id to overwrite the original model config.
         original_config_overrides: Configs that overrides the original config in the model config file.
         sn_model_args: SambaNova specific SNPretrainedConfig.
-        validate_config: Check if the model config has been officially supported.
     Returns:
         Transformed SNPretrainedConfig
     """

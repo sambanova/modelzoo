@@ -20,8 +20,8 @@
   - SN30
 "Images":
   "ubuntu20":
-    "docker-repo": ${DOCKER_REGISTRY}/devbox/ubuntu20/sambaflow_1.23.3-1:0.2.0
+    "docker-repo": ${DOCKER_REGISTRY}/modelbox/ubuntu/modelzoo-dev:1.23.3-1-2024-9-18
     "container-engine": SingularityCE 3.10.5
   "rhel8_5":
-    "docker-repo": ${DOCKER_REGISTRY}/devbox/rhel8.5/sambaflow_1.23.3-1:0.2.0
+    "docker-repo": ${DOCKER_REGISTRY}/modelbox/rhel/modelzoo-dev:1.23.3-1-2024-9-18
     "container-engine": Podman 3.4.2

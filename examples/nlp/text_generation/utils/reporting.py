@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import csv
 import os
-from typing import Any, Dict, List
 
 
 def save_summary_report(output_dir: str, filename: str, summary_text: str) -> None:

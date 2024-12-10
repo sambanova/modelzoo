@@ -370,10 +370,10 @@ def _load_checkpoint(coe_app: coe_api.MLApp,
             inputs = inputs_processor.preprocess_inputs_for_token_gen(kwargs['input_ids'][:, -1:])
         else:
             if static_sequence_lengths:
-                if not call_graph_length:
+                if not _self.call_graph_length:
                     static_seq_len = min([s for s in static_sequence_lengths if s >= input_id_length])
                 else:
-                    static_seq_len = call_graph_length
+                    static_seq_len = _self.call_graph_length
             else:
                 static_seq_len = max_seq_length
             inputs = inputs_processor.preprocess_inputs_for_cache_gen(kwargs['input_ids'], kwargs['attention_mask'],
@@ -404,6 +404,7 @@ def _load_checkpoint(coe_app: coe_api.MLApp,
         else:
             return orig_call(_self, *input, **kwargs)
 
+    model.call_graph_length = call_graph_length
     model.model_rdu_step_run_count = 0
     model.__class__.__call__ = forward_call_to_instance
     model.__call__ = model_rdu_step
@@ -451,7 +452,6 @@ class RDUMonolithLLMPipeline(TextGenerationPipeline):
         self.max_pef_len = max_pef_len
         self.static_seq_lens = static_seq_lens
         self.model_name_or_path = model_name_or_path
-        self.set_call_graph_len(call_graph_len)
         coe_api.set_target_runtime_version(target_runtime_version)
 
         self.ml_app = coe_api.MLApp(self.pef, copy_pef_path=self.copy_pef)
@@ -508,4 +508,4 @@ class RDUMonolithLLMPipeline(TextGenerationPipeline):
         """
         if (call_graph_len is not None) and (call_graph_len not in self.static_seq_lens):
             raise ValueError(f"call_graph_len must be one of {self.static_seq_lens}")
-        self.call_graph_len = call_graph_len
+        self.model.call_graph_len = call_graph_len

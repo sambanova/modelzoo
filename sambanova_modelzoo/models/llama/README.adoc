@@ -1,6 +1,8 @@
-= Llama-2 model card
+= Llama model card
 
-Llama 2, developed by Meta, is "a collection of pretrained and fine-tuned generative text models ranging in scale from 7 billion to 70 billion parameters." This folder contains source code that adapts the model for running on RDU. 
+Llama 2, developed by Meta, is "a collection of pre-trained and fine-tuned generative text models ranging in scale from 7 billion to 70 billion parameters." This folder contains source code that adapts the model for running on RDU.
+
+Llama 3, developed by Meta, represents the latest advancement in their series of large language models, offering enhanced capabilities in natural language understanding and generation. 
 
 == Architecture changes 
 
@@ -8,6 +10,50 @@ Model Zoo models maintain checkpoint compatibility with Hugging Face, so there a
 
 * See  xref:patch_llama.py[] for details on how we've modified the model to run on RDU
 * See xref:../../examples/training/README.adoc[the training README] and the  xref:../../examples/text_generation/README.adoc[text generation README] for discussions of CPU/RDU differences. 
+
+== Llama-2 model variations
+
+[cols="3,2,4,2,3,3,1,5", options="header"]
+|===
+| Model | Parameter Count | HW Generation | Training/Inference | Sequence Length | Batch Size | TP Configurations | O1HD (TP8 and SN40 only)
+| Llama-2 | 7B | SN30, SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 1 | No
+| Llama-2 | 7B | SN30, SN40 | Training | 4096, 8192 | 1, 2, 4, 8 | 1 | No
+
+| Llama-2 | 13B | SN30, SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 1 | No
+| Llama-2 | 13B | SN30, SN40 | Training | 4096, 8192 | 1, 2, 4, 8 | 1 | No
+
+| Llama-2 | 70B | SN30, SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 1 | No
+| Llama-2 | 70B | SN30, SN40 | Training | 4096, 8192 | 1, 2, 4, 8 | 4 | No
+|===
+
+== Llama-3 model variations
+
+[cols="3,2,4,2,3,3,1,5", options="header"]
+|===
+| Model | Parameter Count | HW Generation | Training/Inference | Sequence Length | Batch Size | TP Configurations | O1HD (TP8 and SN40 only)
+| Llama-3 | 8B | SN30, SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 1 | No
+| Llama-3 | 8B | SN30, SN40 | Training | 4096, 8192 | 1, 2, 4, 8 | 1 | No
+|===
+
+== Llama-3.1 model variations
+
+[cols="3,2,4,2,3,3,1,5", options="header"]
+|===
+| Model | Parameter Count | HW Generation | Training/Inference | Sequence Length | Batch Size | TP Configurations | O1HD (TP8 and SN40 only)
+| Llama-3.1 | 8B | SN30, SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 1 | No
+| Llama-3.1 | 8B | SN30, SN40 | Training | 4096, 8192 | 1, 2, 4, 8 | 1 | No
+| Llama-3.1 | 8B | SN30 | Inference | 4096, 8192 | 1, 4, 8, 16 | 8 | No
+| Llama-3.1 | 8B | SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 8 | Yes
+
+| Llama-3.1 | 70B | SN30, SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 1 | No
+| Llama-3.1 | 70B | SN30, SN40 | Training | 4096, 8192 | 1, 2, 4, 8 | 4 | No
+| Llama-3.1 | 70B | SN30 | Inference | 4096, 8192 | 1, 4, 8, 16 | 8 | No
+| Llama-3.1 | 70B | SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 8 | Yes
+|===
+
+NOTE: Tensor Parallelism (TP) is a distributed computing technique that splits a model across multiple devices, enabling them to process different parts of the computation in parallel. See link:https://docs.sambanova.ai/developer/latest/tensor-parallel.html[tensor parallel] for more information. It is also known as 'n_chips', e.g. TP8 is 'n_chips 8' and TP16 is 'n_chips 16'.
+
+NOTE: O1HD, also known as plugin heuristics, involves applying specialized optimizations to customize the model's mapping on the RDU, improving its performance and execution efficiency.
 
 == General use cases
 
@@ -19,15 +65,17 @@ Our models expect data in HDF5 format. See the SambaNova data preparation script
 
 == Model parameters and configuration
 
-See link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] for a discussion of modification options and limitations.  
+See link:https://docs.sambanova.ai/developer/latest/modelzoo-best-practices.html[Model Zoo Best Practices] for a discussion of modification options and limitations.
 
 == Supported models
-Model Zoo currently supports the following Llama-2 versions: 
+Model Zoo currently supports the following Llama versions: 
 
 * Llama-2-7b
 * Llama-2-13b
 * Llama-2-70b
 * Llama-3-8b
+* Llama-3.1-8b
+* Llama-3.1-70b
 
 IMPORTANT: For Llama 70B, base configuration models you must use Tensor Parallel (link) to ensure the model fits on the RDU. Use these settings in the samba_compile section of the config YAML file:
 
@@ -55,3 +103,4 @@ The following Llama models support 16-way data parallel functionality:
 NOTE: The 16-way Data Parallel (DP) enablement feature works fine with 4K sequence lengths. However, it has a risk of running out of memory for 8K and higher sequence lengths.
 
 See xref:developer::data-parallel.adoc#_what_is_data_parallel[What is data parallel] for more information.
+

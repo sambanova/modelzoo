@@ -17,7 +17,6 @@ from typing import Dict, Type
 from sambanova_modelzoo.libs.nlp.core.clm_runtime import CachedInferenceRuntime
 from sambanova_modelzoo.models.config import SNPretrainedConfig
 from sambanova_modelzoo.models.configuration_transformer import ConfigurationTransformerPlugin
-from sambanova_modelzoo.models.configuration_validator import SNConfigValidatorPlugin
 from sambanova_modelzoo.models.gemma.configuration_gemma import SNGemmaConfig
 from sambanova_modelzoo.models.gemma.modeling_gemma import SNGemmaForCausalLM, SNGemmaModel
 from sambanova_modelzoo.models.model_loader import ModelLoaderPlugin
@@ -40,17 +39,9 @@ class GemmaConfigurationTransformer(ConfigurationTransformerPlugin):
         }
 
 
-class GemmaConfigValidator(SNConfigValidatorPlugin):
-    def get_config_type(self) -> Type[SNPretrainedConfig]:
-        return SNGemmaConfig
-
-
 class GemmaModelLoaderPlugin(ModelLoaderPlugin):
     def get_automodel_map(self) -> Dict[Type[PreTrainedModel], _BaseAutoModelClass]:
-        return {
-            SNGemmaModel: AutoModel,
-            SNGemmaForCausalLM: AutoModelForCausalLM
-        }
+        return {SNGemmaModel: AutoModel, SNGemmaForCausalLM: AutoModelForCausalLM}
 
     def get_config_type(self) -> Type[SNPretrainedConfig]:
         return SNGemmaConfig

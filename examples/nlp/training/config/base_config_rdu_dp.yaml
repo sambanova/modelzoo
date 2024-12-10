@@ -27,13 +27,14 @@ model:
     max_seq_length: null
 
 checkpoint:
-    # You can either use 'checkpoint.model_name_or_path' to load weights from disk or 'checkpoint.config_name' to randomly initialize weights for pretraining.
+    # You can either use 'checkpoint.model_name_or_path' to load weights from disk or 'checkpoint.config_name' to randomly initialize weights for pretraining. 
     # Only one option can be used at a time in the training app.
     model_name_or_path: null
     config_name: null
 
 training:
     dataset: null
+    # The batch size to compile a static graph. If you change this parameter you have to recompile. 
     batch_size: null
     num_epochs: 1
     learning_rate: 1e-5
@@ -78,6 +79,8 @@ samba_compile:
     num_tiles: 4
     # Enable HBM allocation for sn40
     all_regions_hbm: True
+    # HBM/DRAM auto allocation algorithm
+    hbm_auto_alloc: linear_scan
     enable_safe_stochastic_rounding: True
     data_parallel: True
     world_size: 2

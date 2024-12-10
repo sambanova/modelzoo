@@ -54,8 +54,7 @@ def logger_info(message: str):
 
 def get_sn_config(config_name_or_path: str,
                   sn_model_config: PretrainedModelConfig,
-                  original_config_overrides: Optional[Dict[str, Any]] = None,
-                  validate_config: bool = False) -> SNPretrainedConfig:
+                  original_config_overrides: Optional[Dict[str, Any]] = None) -> SNPretrainedConfig:
     """
     Use original Hugging Face model checkpoint to load a SambaNova model config.
     SambaNova model config is extended from Hugging Face for RDU optimization. 
@@ -63,7 +62,6 @@ def get_sn_config(config_name_or_path: str,
         config_name_or_path: Either Hugging Face model config file or directory that contains the config file or model id for downloading.
         sn_model_config: SambaNova specific pretrained model configurations.
         original_config_overrides: Configs that override the original model configurations.
-        validate_config: Check if the model config is officially supported.
     Returns:
         SambaNova pretrained model config for constructing a model.
     """
@@ -83,8 +81,7 @@ def get_sn_config(config_name_or_path: str,
 
 def load_model_from_config(config_name: str,
                            sn_model_config: PretrainedModelConfig,
-                           original_config_overrides: Optional[Dict[str, Any]] = None,
-                           validate_config: bool = False) -> PreTrainedModel:
+                           original_config_overrides: Optional[Dict[str, Any]] = None) -> PreTrainedModel:
     """
     Use original Hugging Face model checkpoint to load a SambaNova model.
     SambaNova model is modified from Hugging Face for RDU optimization. 
@@ -92,20 +89,24 @@ def load_model_from_config(config_name: str,
         config_name: Either Hugging Face model config file or directory contains the config file or model id for downloading.
         sn_model_config: SambaNova specific pretrained model pydantic configuration schema.
         original_config_overrides: Configs that override the original model configurations.
-        validate_config: Check if the model config has been officially supported.
     Returns:
         SambaNova customized model.
     """
     sn_config = get_sn_config(config_name, sn_model_config, original_config_overrides=original_config_overrides)
     # dtype has to be bfloat16 to do mixed precision on RDU
-    sn_model = AutoModelForCausalLM.from_config(sn_config, torch_dtype=sn_model_config.dtype)
+    # The inclusion of attn_implementation=sn_config._attn_implementation is necessary because
+    # of a bug in Hugging Face where the attn_implementation in the config is not properly
+    # recognized by AutoModel (see https://github.com/huggingface/transformers/issues/30298).
+    # This can be removed after upgrading Hugging Face to version 4.4 or higher.
+    sn_model = AutoModelForCausalLM.from_config(sn_config,
+                                                torch_dtype=sn_model_config.dtype,
+                                                attn_implementation=sn_config._attn_implementation)
     return sn_model
 
 
 def load_model_from_pretrained(model_name_or_path: str,
                                sn_model_config: PretrainedModelConfig,
-                               original_config_overrides: Optional[Dict[str, Any]] = None,
-                               validate_config: bool = False) -> PreTrainedModel:
+                               original_config_overrides: Optional[Dict[str, Any]] = None) -> PreTrainedModel:
     """
     Use original Hugging Face model checkpoint to load a SambaNova model.
     SambaNova model is modified from Hugging Face for RDU optimization. 
@@ -113,7 +114,6 @@ def load_model_from_pretrained(model_name_or_path: str,
         model_name_or_path: Has either Hugging Face model config file or model cache directory or model id for downloading.
         sn_model_config: SambaNova specific pretrained model pydantic configuration schema.
         original_config_overrides: Configs that override the original model configurations.
-        validate_config: Check if the model config has been officially supported.
     Returns:
         SambaNova customized model.
     """
@@ -129,10 +129,15 @@ def load_model_from_pretrained(model_name_or_path: str,
     # Tie embeddings to load the lm_head weights correctly
     if force_untie:
         sn_config.tie_word_embeddings = True
+
+    # The inclusion of attn_implementation=sn_config._attn_implementation is necessary because
+    # of a bug in Hugging Face where the attn_implementation in the config is not properly
+    # recognized by AutoModel (see https://github.com/huggingface/transformers/issues/30298).
+    # This can be removed after upgrading Hugging Face to version 4.4 or higher.
     sn_model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
                                                     config=sn_config,
-                                                    torch_dtype=sn_model_config.dtype)
-
+                                                    torch_dtype=sn_model_config.dtype,
+                                                    attn_implementation=sn_config._attn_implementation)
     # Force to untie the weights after loading the checkpoints by cloning. Sambaflow stack does not support multigraph
     # cached inference with weights tied. So here, we use the similar way of cloning the tied weights as Hugging Face
     # did for torchscript, ref transformers/modeling_utils.py::tie_or_clone_weights

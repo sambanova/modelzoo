@@ -56,9 +56,13 @@ from transformers.utils import (add_start_docstrings, add_start_docstrings_to_mo
                                 replace_return_docstrings, is_flash_attn_2_available)
 
 from .configuration_mistral import SNMistralConfig
-from .patch_mistral import (sn_mistral_mlp_forward, sn_mistral_rms_norm_forward, 
-                            _sn_mistral_set_cos_sin_cache, 
-                            sn_mistral_rotary_embedding_forward, sn_mistral_attention_forward, sn_mistral_decoder_forward, sn_mistral_model_forward, sn_mistral_for_causallm_forward, sn_mistral_model_self)
+from .patch_mistral import (MistralRMSNormNamespace,
+                            MistralRotaryEmbeddingNamespace,
+                            MistralMLPNamespace,
+                            MistralDecoderLayerNamespace,
+                            SNMistralModelNamespace,
+                            SNMistralForCausalLMNamespace,
+                            MistralAttentionNamespace)
 
 if is_flash_attn_2_available():
     from transformers.flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -96,7 +100,7 @@ class MistralRMSNorm(nn.Module):
         # [SambaNova] flag to enable fp32 norm
         self.fp32_ln = fp32_ln
 
-    @sn_patch_replace(patch=sn_mistral_rms_norm_forward, 
+    @sn_patch_replace(patch=MistralRMSNormNamespace.patch_forward,
                         description='Handle SN mixed precision rms norm.')
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
@@ -122,7 +126,7 @@ class MistralRotaryEmbedding(nn.Module):
                                 device=self.inv_freq.device,
                                 dtype=torch.get_default_dtype())
 
-    @sn_patch_replace(patch=_sn_mistral_set_cos_sin_cache,
+    @sn_patch_replace(patch=MistralRotaryEmbeddingNamespace.patch__set_cos_sin_cache,
                         description='Handle SN change in dimensions for cos/sin cache.')
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
@@ -134,7 +138,7 @@ class MistralRotaryEmbedding(nn.Module):
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
-    @sn_patch_replace(patch=sn_mistral_rotary_embedding_forward, 
+    @sn_patch_replace(patch=MistralRotaryEmbeddingNamespace.patch_forward,
                       description='Use split instead of index select for more performance.')
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -193,9 +197,9 @@ class MistralMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-    
+
     @sn_patch_replace(
-        patch=sn_mistral_mlp_forward,
+        patch=MistralMLPNamespace.patch_forward,
         description="To annotate OpFusion ID."
     )
     def forward(self, x):
@@ -250,7 +254,7 @@ class MistralAttention(nn.Module):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     @sn_patch_replace(
-        patch=sn_mistral_attention_forward,
+        patch=MistralAttentionNamespace.patch_forward,
         description="If using SambaNova cached inference we need to override how layer_past is used."
     )
     def forward(
@@ -264,7 +268,7 @@ class MistralAttention(nn.Module):
             # [SambaNova] Integer index tensor of size 1, indicates current token generation position for cached inference
             last_token_index: Optional[torch.Tensor] = None,
             # [SambaNova] Calculate cos/sin only once
-            cos: Optional[torch.Tensor] = None, 
+            cos: Optional[torch.Tensor] = None,
             sin: Optional[torch.Tensor] = None,
             **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -619,7 +623,7 @@ class MistralDecoderLayer(nn.Module):
             else MistralFlashAttention2(config)
         )
         self.mlp = MistralMLP(config)
-        self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, 
+        self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps,
         # [SambaNova] FP32 Norm
         fp32_ln=config.fp32_ln)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size,
@@ -629,7 +633,7 @@ class MistralDecoderLayer(nn.Module):
         # [SambaNova] Used to set precision inside decoder.
         self.config = config
 
-    @sn_patch_replace(patch=sn_mistral_decoder_forward,
+    @sn_patch_replace(patch=MistralDecoderLayerNamespace.patch_forward,
                       description='Handle SN mixed precision.')
     def forward(
             self,
@@ -818,7 +822,7 @@ class SNMistralModel(MistralPreTrainedModel):
         config: SNMistralConfig
     """
     @sn_patch_post_process_self(
-        modification=lambda self: sn_mistral_model_self(self, MistralRotaryEmbedding),
+        modification=lambda self: SNMistralModelNamespace.add_embedding_hyperfunction(self, MistralRotaryEmbedding, SNMistralForCausalLM),
         description="Post process the model to add cos/sin cache and hyperfunction boundaries."
     )
     def __init__(self, config: SNMistralConfig):
@@ -840,7 +844,7 @@ class SNMistralModel(MistralPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @sn_patch_replace(patch=sn_mistral_model_forward,
+    @sn_patch_replace(patch=SNMistralModelNamespace.patch_forward,
                       description='Handle SN mixed precision, also set hyperfunction boundaries for efficient mappings.')
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def forward(
@@ -993,7 +997,7 @@ class SNMistralForCausalLM(MistralPreTrainedModel, CausalLMGenerationMixin):
         MistralPreTrainedModel.__init__(self, config)
         CausalLMGenerationMixin.__init__(self)
 
-        self.hyperfunction = MistralHyperfunction(config)
+        self.hyperfunction = MistralHyperfunction(config, SNMistralForCausalLM)
         self.model = SNMistralModel(config)
         self.model.hyperfunction = self.hyperfunction
         self.vocab_size = config.vocab_size
@@ -1001,8 +1005,6 @@ class SNMistralForCausalLM(MistralPreTrainedModel, CausalLMGenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-        # [SambaNova] Set hyperfunction boundaries.
-        self.hyperfunction = MistralHyperfunction(config)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -1024,7 +1026,7 @@ class SNMistralForCausalLM(MistralPreTrainedModel, CausalLMGenerationMixin):
 
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    @sn_patch_replace(patch=sn_mistral_for_causallm_forward,
+    @sn_patch_replace(patch=SNMistralForCausalLMNamespace.patch_forward,
                       description='Handle SN mixed precision, set hyperfunction boundaries for efficient mapping, set Cross Entropy reduction type to None.')
     def forward(
             self,
@@ -1119,7 +1121,7 @@ class SNMistralForCausalLM(MistralPreTrainedModel, CausalLMGenerationMixin):
         patch=lambda self, input_ids, **kwargs: self.sn_prepare_inputs_for_generation(input_ids, **kwargs),
         enable_if=lambda self, **kwargs: kwargs.get('use_cache', False),
         description=('Needed for SambaNova cached inference to be initialized and used, can not be patched'
-                     'if use_cache is False, SN cached inference framwork requires use_cache is True.')
+                     'if use_cache is False, SN cached inference framework requires use_cache is True.')
     )
     def prepare_inputs_for_generation(self,
                                         input_ids,

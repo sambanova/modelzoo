@@ -74,11 +74,9 @@ class GreedySampling(SamplingModule, method=SamplingMethod.greedy):
 
     def forward(self, logits: torch.Tensor, repetition_penalty: torch.Tensor,
                 token_count: torch.Tensor) -> torch.Tensor:
-        assert len(
-            logits.shape) == 3 and logits.shape[1] == 1, "logits must be sliced to be of shape (bs, 1, vocab_size)"
+        assert len(logits.shape) == 3, "logits must be sliced to be of shape (bs, token_gen_seq_length, vocab_size)"
 
-        logits = self.repetition_penalty_processor(logits.squeeze(1), repetition_penalty, token_count)
-        logits = logits.unsqueeze(1)
+        logits = self.repetition_penalty_processor(logits, repetition_penalty, token_count)
         next_token = torch.argmax(logits, dim=-1).int()
         return next_token
 
@@ -104,14 +102,21 @@ class SNRepetitionPenaltyLogitsProcessor(torch.nn.Module):
     def forward(self, logits: torch.Tensor, penalty: torch.Tensor, token_count: torch.Tensor):
         """Applies the repetition penalty.
         Args:
-            logits: the original logits, of shape (batch_size, vocab_size)
+            logits: the original logits, of shape (batch_size, 1, vocab_size)
             penalty: the penalty to apply, of shape (batch_size, 1). If ``None``, this function is a no-op.
             token_count: the count of each encountered token, including prompt tokens and generated tokens, of shape
                 (batch_size, vocab_size).
         Returns:
             the logits with repetition penalty applied
         """
+
+        # Repetition penalty doesn't support speculative decoding right now
+        if logits.shape[1] > 1:
+            return logits
+
         from sambanova_modelzoo.models.custom_ops import sn_imm, sn_select, sn_zipmapreduce
+
+        logits = logits.squeeze(1)
 
         # Update the logits in streaming fashion
         r_penalty = torch.reciprocal(penalty).float()
@@ -123,6 +128,8 @@ class SNRepetitionPenaltyLogitsProcessor(torch.nn.Module):
                 token_count > sn_imm(0, dtype=torch.int32),
                 sn_select(logits > sn_imm(0, dtype=torch.float32), logits * r_penalty, logits * penalty), logits),
             [logits, token_count, penalty, r_penalty])
+
+        logits = logits.unsqueeze(1)
 
         return logits
 
@@ -158,13 +165,16 @@ class MultinomialSampling(SamplingModule, method=SamplingMethod.multinomial):
         self.max_k = max_k
         self.repetition_penalty_processor = SNRepetitionPenaltyLogitsProcessor()
 
-    def forward(self, logits: torch.Tensor, generated_index: torch.Tensor, temperature: torch.Tensor,
+    def forward(self, logits: torch.Tensor, last_token_index: torch.Tensor, temperature: torch.Tensor,
                 top_k: torch.Tensor, top_p: torch.Tensor, pre_generated_randoms: torch.Tensor,
                 repetition_penalty: torch.Tensor, token_count: torch.Tensor) -> torch.Tensor:
         # assert inputs shapes
-        assert len(logits.shape) == 3, f"Expected logits to be of shape (batch_size, 1, vocab_size), got {logits.shape}"
-        assert len(generated_index.shape
-                   ) == 2, f"Expected generated_index to be of shape (batch_size, 1), got {generated_index.shape}"
+        assert len(
+            logits.shape
+        ) == 3, f"Expected logits to be of shape (batch_size, token_gen_seq_length, vocab_size), got {logits.shape}"
+        assert len(
+            last_token_index.shape
+        ) == 2, f"Expected generated_index to be of shape (batch_size, token_gen_seq_length), got {last_token_index.shape}"
         assert len(
             temperature.shape) == 2, f"Expected temperature to be of shape (batch_size, 1), got {temperature.shape}"
         assert len(top_k.shape) == 2, f"Expected top_k to be of shape (batch_size, 1), got {top_k.shape}"
@@ -184,30 +194,35 @@ class MultinomialSampling(SamplingModule, method=SamplingMethod.multinomial):
         from sambanova_modelzoo.models.custom_ops import gather as sn_gather
         from sambanova_modelzoo.models.custom_ops import sn_imm, sn_iteridx, sn_multinomial, sn_select, sn_zipmapreduce
 
-        # logits -> (batch_size, 1, vocab_size) -> (batch_size, vocab_size)
-        logits = logits.squeeze(1)
+        # unsqueeze to match shape: (batch_size, 1, 1)
+        temperature = temperature.unsqueeze(-1)
+        top_k = top_k.unsqueeze(-1)
+        top_p = top_p.unsqueeze(-1)
+
+        # apply repetition penalty
         logits = self.repetition_penalty_processor(logits, repetition_penalty, token_count)
 
         # Temperature scaling
         recip_temperature = torch.reciprocal(temperature)
+        # (batch_size, k, vocab_size)
         logits = logits * recip_temperature
 
         # TopK fixed to self.max_k to avoid dynamic output shape
-        top_logits, top_indices = torch.topk(logits, self.max_k, dim=1, largest=True, sorted=True)
+        top_logits, top_indices = torch.topk(logits, self.max_k, dim=2, largest=True, sorted=True)
         top_indices = top_indices.to(torch.int32)
 
-        # logits -> (bs, vocab_size)
+        # logits -> (bs, k, vocab_size)
         top_logits = top_logits.float()
         top_k_logits = sn_zipmapreduce(
             lambda attrs, logits, top_k: sn_select(
-                sn_iteridx(dim=1, attrs=attrs, dtype=torch.int32) < sn_select(top_k < sn_imm(
+                sn_iteridx(dim=2, attrs=attrs, dtype=torch.int32) < sn_select(top_k < sn_imm(
                     1, dtype=torch.int32), sn_imm(1, dtype=torch.int32), top_k), logits,
                 sn_imm(torch.finfo(torch.float).min, dtype=torch.float32)), [top_logits, top_k])
 
-        probs = F.softmax(top_k_logits, dim=1)
+        probs = F.softmax(top_k_logits, dim=2)
 
         # Draw samples using sn_multinomial
-        samples = sn_gather(pre_generated_randoms, generated_index, [0], [1], batched_dims=1)
+        samples = sn_gather(pre_generated_randoms, last_token_index.unsqueeze(-1), [0], [1], batched_dims=1)
         samples = samples.float()
         top_p = top_p.float()
 
@@ -217,12 +232,23 @@ class MultinomialSampling(SamplingModule, method=SamplingMethod.multinomial):
                 sn_select(top_p > sn_imm(1.0, dtype=torch.float32), sn_imm(1.0, dtype=torch.float32), top_p)),
             [samples, top_p])
 
-        # --> [bs]
+        # flattened the samples
+        probs = probs.float()
+        shape_3d = list(probs.shape)
+        total_samples = 1
+        for shape in shape_3d[:-1]:
+            total_samples *= shape
+        probs = probs.reshape([total_samples, shape_3d[-1]])
+        scaled_samples = scaled_samples.reshape([total_samples, 1])
+
+        # --> [bs x k]
         sampled_indices = sn_multinomial(probs.float(), scaled_samples)
 
-        # get the original tokens
-        gather_indices = sampled_indices.unsqueeze(1).unsqueeze(1).to(top_indices.dtype)
-        next_token = sn_gather(top_indices, gather_indices, [0], [1], batched_dims=1).squeeze(1)
+        # shape it back --> [bs, k, 1, 1]
+        gather_indices = sampled_indices.reshape(shape_3d[:-1] + [1, 1]).to(top_indices.dtype)
+
+        # get the original tokens: [bs, k]
+        next_token = sn_gather(top_indices, gather_indices, [0], [1], batched_dims=2).squeeze(2).squeeze(2)
 
         return next_token
 

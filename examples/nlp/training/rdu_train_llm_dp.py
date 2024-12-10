@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 This file demonstrates how to do the following in a RDU environment:
   1. Load an LLM
@@ -26,22 +25,19 @@ It is for demonstrative purposes only and not intended to be used for real train
 It follows the same structure as and shares much of its code with cpu_train_llm.py
 """
 
-from contextlib import nullcontext
+import time
 from typing import Dict
 
-import time
 import hydra
 import torch
 from accelerate import init_empty_weights
-from config.schema import CheckpointConfig, PretrainedModelConfig, TrainingConfig
-from config.schema import  RDUTrainingConfig
+from config.schema import CheckpointConfig, PretrainedModelConfig, RDUTrainingConfig, TrainingConfig
 from sambanova_modelzoo.libs.common.arguments import to_pydantic
 from sambanova_modelzoo.libs.common.pef_meta import APP_ARGS_KEY, from_pef_meta_dict, to_pef_meta_dict
 from sambanova_modelzoo.libs.nlp.core.clm_runtime import PretrainRuntime, SambaPretrainInputNames
 from sambanova_modelzoo.libs.nlp.core.clm_tracer import PretrainTracer
 from sambanova_modelzoo.libs.nlp.core.token_utils import COMPLETION_TOKEN, PROMPT_TOKEN
 from sambanova_modelzoo.models.configuration_transformer import ConfigurationTransformer
-from sambanova_modelzoo.models.configuration_validator import SNAutoConfigValidator
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoConfig, AutoModelForCausalLM, PreTrainedModel, set_seed
@@ -51,8 +47,9 @@ from utils.reporting import save_per_step_report, save_summary_report
 
 from sambaflow import samba
 from sambaflow.samba import SambaTensor
-from sambaflow.samba.utils import trace_graph, get_rank, get_world_size, is_main_process
+from sambaflow.samba.utils import get_rank, get_world_size, is_main_process
 from sambaflow.samba.utils import set_seed as set_samba_seed
+from sambaflow.samba.utils import trace_graph
 from sambaflow.samba.utils.checkpoint import load_sharded_checkpoint
 from sambaflow.samba.utils.pef_utils import get_pefmeta_dict
 
@@ -114,8 +111,6 @@ def compile(cfg: RDUTrainingConfig, tracing_inputs: Dict[str, "torch.tensor"], m
     # Get the arguments for the compiler
     compile_dict = cfg.samba_compile.model_dump()
 
-    # Will error out if the input configuration is not supported by SambaNova. Add `job_config.validate_config=False` to bypass this check
-    SNAutoConfigValidator.validate(model_config=model.config, job_config=cfg)
     # Embed some metadata in the PEF.
     # samba_compile metadata is required for `samba.session.setup()` during runtime.
     # But other args (model, checkpoint, training) are purely for convenience
@@ -179,6 +174,7 @@ def main(cfg: RDUTrainingConfig):
 
     print('Loading optimizer...')
     import sambaflow.samba.optim as optim  # important! Load the optimizer from samba instead
+
     # if model params are empty/meta tensors, the optim state tensors will also be empty/meta tensors
     optimizer = optim.AdamW(model.parameters(), lr=cfg.training.learning_rate)
 
@@ -253,11 +249,9 @@ def main(cfg: RDUTrainingConfig):
     else:
         raise ValueError('Only compile and run commands are supported')
 
-
     # ModelZoo's PretrainRuntime will be used in the training loop to
     # create attention masks and labels from the input data
     inputs_processor = PretrainRuntime(cfg.model.max_seq_length)
-
 
     # Keep track of per step metrics for reporting
     tokens_per_step = []
@@ -283,10 +277,10 @@ def main(cfg: RDUTrainingConfig):
         world_size = get_world_size()
 
         training_overview = ("\n"
-                            f"Number of epochs: {cfg.training.num_epochs}\n"
-                            f"Per worker batch size: {cfg.training.batch_size}\n"
-                            f"Per worker number of batches (steps): {num_batches:,}\n"
-                            f"Number of DP workers: {world_size}\n")
+                             f"Number of epochs: {cfg.training.num_epochs}\n"
+                             f"Per worker batch size: {cfg.training.batch_size}\n"
+                             f"Per worker number of batches (steps): {num_batches:,}\n"
+                             f"Number of DP workers: {world_size}\n")
         if is_main_process():
             print(training_overview)
 
@@ -309,7 +303,7 @@ def main(cfg: RDUTrainingConfig):
             loss_tensor.sn_grad = grad_scale
 
             # Forward, backward, and optim happen in a single samba.session.run call
-            outputs = samba.session.run(model_inputs, model_outputs, data_parallel=True, reduce_on_rdu=True)
+            outputs = samba.session.run(model_inputs, loss_tensor, data_parallel=True, reduce_on_rdu=True)
 
             # Reduce the loss tensor wrt grad scale between workers to report the mean loss
             loss = samba.to_torch(outputs[0]).float()
@@ -339,7 +333,7 @@ def main(cfg: RDUTrainingConfig):
                 lr_per_step.append(cfg.training.learning_rate)
                 time_per_step.append(end_step_time - start_step_time)
 
-            if i+1 == cfg.training.end_early_at_step:
+            if i + 1 == cfg.training.end_early_at_step:
                 break_training = True
                 break
 
@@ -357,7 +351,7 @@ def main(cfg: RDUTrainingConfig):
                 model_outputs[0].sn_grad = inputs_processor.get_gradient_scale(batch['token_type_ids'])
 
                 # Only run forward
-                outputs = samba.session.run(model_inputs, model_outputs, section_types=['fwd'])
+                outputs = samba.session.run(model_inputs, model_outputs[0], section_types=['fwd'])
 
                 grad_scale = inputs_processor.get_gradient_scale(batch['token_type_ids'])
                 loss = (samba.to_torch(outputs[0]).float() * grad_scale.float()).sum()
@@ -393,10 +387,15 @@ def main(cfg: RDUTrainingConfig):
         print(f'Summary saved at {cfg.training.output_dir}/summary.txt')
 
         print('Saving metrics...')
-        metrics = {'Tokens in Step': tokens_per_step, 'Step Loss': loss_per_step, 'Learning Rate': lr_per_step,
-                   'Time per Step': time_per_step}
+        metrics = {
+            'Tokens in Step': tokens_per_step,
+            'Step Loss': loss_per_step,
+            'Learning Rate': lr_per_step,
+            'Time per Step': time_per_step
+        }
         save_per_step_report(cfg.training.output_dir, 'per_step_metrics.csv', metrics)
         print(f'Metrics saved at {cfg.training.output_dir}/per_step_metrics.csv')
+
 
 if __name__ == '__main__':
     main()

@@ -105,7 +105,7 @@ python rdu_train_llm_dp.py \
 [source,bash]
 ----
 export PEF=/path/to/compiled/pef;
-/opt/mpich-3.4.3/bin/mpirun -np <NUM_PROCESSES> python -u rdu_train_llm_dp.py \
+/opt/sambanova/bin/mpirun -np <NUM_PROCESSES> python -u rdu_train_llm_dp.py \
     command=run \
     checkpoint.config_name=${CHECKPOINT} \
     model.max_seq_length=${MAX_SEQ_LENGTH} \

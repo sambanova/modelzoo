@@ -17,7 +17,7 @@ import glob
 import importlib
 import pathlib
 import types
-from typing import Callable, Optional, Set, Tuple, Type
+from typing import Callable, List, Optional, Set, Tuple, Type
 
 # TODO: Explain what this file does in a sentence or two.
 
@@ -52,7 +52,7 @@ def find_general_files(files_matcher_glob: str) -> Set[str]:
     return set(matched_files)
 
 
-def find_import_files(path_matcher_glob: str, filename_matcher_glob: str) -> Set[Tuple[str, Optional[str]]]:
+def find_import_files(path_matcher_glob: str, filename_matcher_glob: str) -> List[Tuple[str, Optional[str]]]:
     """
     find files (and optionally requirements files) to import
     Args:
@@ -60,18 +60,19 @@ def find_import_files(path_matcher_glob: str, filename_matcher_glob: str) -> Set
         filename_matcher_glob:
 
     Returns:
-        a set of Tuple[str, Optional[str]] of files to import and their corresponding requirements file to evaluate before importing (if any)
+        A sorted list of Tuple[str, Optional[str]] of files to import and their corresponding requirements
+        file to evaluate before importing (if any)
     """
-    found_import_files = set()
+    found_import_files = []
     matched_files = glob.glob(path_matcher_glob + '/' + filename_matcher_glob, recursive=True)
     for file in matched_files:
         requirements_file = glob.glob(str(pathlib.Path(file).resolve().parent) + '/requirements_*.py')
-        found_import_files.add((file, requirements_file[0] if len(requirements_file) > 0 else None))
+        found_import_files.append((file, requirements_file[0] if len(requirements_file) > 0 else None))
 
-    return found_import_files
+    return sorted(found_import_files)
 
 
-def _check_that_files_in_package(module_files, package_dir, package_name):
+def _check_files_in_package(module_files, package_dir, package_name):
     for path in module_files:
         if not path.startswith(package_dir):
             raise ValueError(f'Module file "{path}" not part of package: {package_name}')
@@ -87,7 +88,7 @@ def import_modules(module_files: Set[str], package_dir: str, package_name: str) 
     Returns:
         True if all went without errors, raises an exception if not.
     """
-    _check_that_files_in_package(module_files, package_dir, package_name)
+    _check_files_in_package(module_files, package_dir, package_name)
 
     for module_path in module_files:
         import_file(module_path, package_dir, package_name)
@@ -95,11 +96,11 @@ def import_modules(module_files: Set[str], package_dir: str, package_name: str) 
     return True
 
 
-def import_modules_with_requirements(files_with_requirements: Set[Tuple[str, Optional[str]]], package_dir: str,
+def import_modules_with_requirements(files_with_requirements: List[Tuple[str, Optional[str]]], package_dir: str,
                                      package_name: str) -> bool:
 
     module_files = {f for (f, r) in files_with_requirements}
-    _check_that_files_in_package(module_files, package_dir, package_name)
+    _check_files_in_package(module_files, package_dir, package_name)
 
     for module_path, requirements_file in files_with_requirements:
         if requirements_file is None or _is_requirement_ok(requirements_file, package_dir, package_name):

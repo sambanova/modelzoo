@@ -1,4 +1,4 @@
-# Copyright 2024 SambaNova Systems, Inc.
+# Copyright 2023-2024 SambaNova Systems, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -233,9 +233,11 @@ sdpa_3d_attn_mask:
   pattern:
     collect_0:
       op_type: zipmapreduce
-      child: collect_1
-    collect_1:
-      op_type: zipmapreduce
+      child: triu_fill
+    triu_fill:
+      op_type: 
+        - zipmapreduce
+        - triufill
       child: scaled_dot_product_attention_0
     scaled_dot_product_attention_0:
       op_type: scaled_dot_product_attention

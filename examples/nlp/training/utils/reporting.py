@@ -38,7 +38,7 @@ def save_per_step_report(output_dir: str, filename: str, metrics: Dict[str, List
         output_dir: directory to store report
         metrics: dict mapping metric name to list of metrics per step
     """
-    output_file = os.path.join(output_dir, filename) 
+    output_file = os.path.join(output_dir, filename)
     with open(output_file, mode='w') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=metrics.keys())
         writer.writeheader()

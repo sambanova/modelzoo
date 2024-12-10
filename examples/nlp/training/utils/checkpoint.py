@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import tempfile
-from accelerate import init_empty_weights
-from filelock import FileLock
-from transformers import AutoConfig, PreTrainedModel, AutoModelForCausalLM
+from config.schema import CheckpointConfig
+from transformers import AutoConfig, AutoModelForCausalLM, PreTrainedModel
+
 from sambaflow import samba
 
-from config.schema import CheckpointConfig
 
 def save_as_huggingface_checkpoint(model: PreTrainedModel, checkpoint: CheckpointConfig, output_dir: str):
     """Save a traced samba model to a huggingface checkpoint"""
@@ -28,13 +25,13 @@ def save_as_huggingface_checkpoint(model: PreTrainedModel, checkpoint: Checkpoin
     try:
         samba.session.to_cpu(model)
     except AttributeError:
-        pass # This is a model that was run on cpu
+        pass  # This is a model that was run on cpu
 
     # Convert SambaTensors to Torch tensors
     torch_sd = {}
     for name, param in model.state_dict().items():
         torch_sd[name] = samba.to_torch(param)
-    
+
     # Create an identical torch model as the base model
     model_pointer = checkpoint.config_name or checkpoint.model_name_or_path
     config = AutoConfig.from_pretrained(model_pointer)

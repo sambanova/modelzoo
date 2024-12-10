@@ -22,6 +22,20 @@ class HyperfunctionForCausalLM:
         self.config = config
         self._fuse_lm_head_with_sampling: bool = False
 
+    @property
+    def is_fuse_lm_head_with_sampling(self) -> bool:
+        """
+        Whether to fuse the language model head with sampling.
+        """
+        return self._fuse_lm_head_with_sampling
+
+    @is_fuse_lm_head_with_sampling.setter
+    def is_fuse_lm_head_with_sampling(self, value: bool) -> None:
+        """
+        Set whether to fuse the language model head with sampling.
+        """
+        self._fuse_lm_head_with_sampling = value
+
     @contextmanager
     def fuse_lm_head_with_sampling(self):
         """
@@ -32,9 +46,9 @@ class HyperfunctionForCausalLM:
         We need different O1HD heuristics for these two sliced graphs; lm_head only and fused lm_head with sampling.
         """
         before = self._fuse_lm_head_with_sampling
-        self._fuse_lm_head_with_sampling = True
+        self.is_fuse_lm_head_with_sampling = True
         yield
-        self._fuse_lm_head_with_sampling = before
+        self.is_fuse_lm_head_with_sampling = before
 
     def MPMD_heuristic(self, heuristic_str):
         # return heuristic dict for MPMD(multiple program multiple data) heuristic hook

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 This file contains a set of Pydantic models that define program arguments.
 
@@ -24,7 +23,7 @@ from typing import Optional
 from pydantic import BaseModel, DirectoryPath, Field, PositiveFloat, PositiveInt, model_validator
 from sambanova_modelzoo.libs.common.common_schema import CheckpointConfig
 from sambanova_modelzoo.libs.common.pretrained_model_schema import PretrainedModelConfig
-from sambanova_modelzoo.libs.common.samba_schema import SambaConfig, ValidatorConfig
+from sambanova_modelzoo.libs.common.samba_schema import SambaConfig
 from typing_extensions import Self
 
 
@@ -49,7 +48,7 @@ class CPUTrainingConfig(BaseModel):
     training: TrainingConfig
 
 
-class RDUTrainingConfig(CPUTrainingConfig, SambaConfig, ValidatorConfig):
+class RDUTrainingConfig(CPUTrainingConfig, SambaConfig):
     """
     Collection of Arguments for RDU training app
 

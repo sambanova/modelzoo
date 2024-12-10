@@ -1,0 +1,6 @@
+{
+  "enable_wbuf_nbuf_for_biggemm": true,
+  "arc_flags": "--air-force-dram-first-then-p2p=true --air-buffer-non-redundancy=false:1,2 --air-metapipe-with-one-iteration-removal=true --override_max_fanout=40 ",
+  "prism_flags": "--pnr-allow-init-exec-overlap=false --reuse-placement-reorder-units ",
+  "mac_flags": "--mac_disable_maxsub_fusion=true"
+}

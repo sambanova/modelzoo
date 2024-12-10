@@ -11,6 +11,19 @@ Model Zoo models maintain checkpoint compatibility with Hugging Face, so there a
 * See  xref:patch_mistral.py[] for details on how we've modified the model to run on RDU
 * See xref:../../examples/training/README.adoc[the training README] and the  xref:../../examples/text_generation/README.adoc[text generation README] for discussions of CPU/RDU differences. 
 
+== Mistral model variations
+
+[cols="2,2,4,2,3,3,1,4", options="header"]
+|===
+| Model | Parameter Count | HW Generation | Training/Inference | Sequence Length | Batch Size | TP Configurations | O1HD (TP8 and SN40 only)
+| Mistral | 7B | SN30, SN40 | Inference | 4096, 8192 | 1, 4, 8, 16 | 1 | No
+| Mistral | 7B | SN30, SN40 | Training | 4096, 8192 | 1, 2, 4, 8 | 1 | No
+|===
+
+NOTE: Tensor Parallelism (TP) is a distributed computing technique that splits a model across multiple devices, enabling them to process different parts of the computation in parallel. See link:https://docs.sambanova.ai/developer/latest/tensor-parallel.html[tensor parallel] for more information. It is also known as 'n_chips', e.g. TP8 is 'n_chips 8' and TP16 is 'n_chips 16'.
+
+NOTE: O1HD, also known as plugin heuristics, involves applying specialized optimizations to customize the model's mapping on the RDU, improving its performance and execution efficiency.
+
 == General use cases
 
 See the link:https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1[Mistral-7B-Instruct-v0.1 Model Card]. SambaNova does not ship checkpoints for this model. Instead, you can use the Model Zoo model source with the corresponding Hugging Face checkpoint. 

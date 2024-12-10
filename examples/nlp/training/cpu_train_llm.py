@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 This file demonstrates how to do the following in a CPU environment:
   1. Load an LLM
@@ -27,13 +26,8 @@ It is for demonstrative purposes only and not intended to be used for real train
 It follows the same structure as and shares much of its code with rdu_train_llm.py.
 """
 
-from typing import Dict
-
 import hydra
-import torch
-from accelerate import init_empty_weights
-from config.schema import CheckpointConfig, PretrainedModelConfig, TrainingConfig
-from config.schema import CPUTrainingConfig
+from config.schema import CheckpointConfig, CPUTrainingConfig, PretrainedModelConfig, TrainingConfig
 from sambanova_modelzoo.libs.common.arguments import to_pydantic
 from sambanova_modelzoo.libs.nlp.core.clm_runtime import PretrainRuntime
 from sambanova_modelzoo.models.configuration_transformer import ConfigurationTransformer
@@ -87,7 +81,10 @@ def load_dataset(training: TrainingConfig, model_seq_length: int) -> DataLoader:
     # ModelZoo LLMs expect data processed using generative_data_prep.
     # Each sample is {'input_ids': List[List[int]], 'token_type_ids': List[List[int]]}
     # For more details on token_type_ids, refer to TODO: article attention docs
-    dataloader = HDF5ParallelLoader(dataset_path, dataset_seq_length, local_batch_size=training.batch_size, drop_last=True)
+    dataloader = HDF5ParallelLoader(dataset_path,
+                                    dataset_seq_length,
+                                    local_batch_size=training.batch_size,
+                                    drop_last=True)
     return dataloader
 
 
@@ -124,11 +121,11 @@ def main(cfg: CPUTrainingConfig):
         num_batches = len(dataloader)
 
         training_overview = ("\n"
-            f"Number of epochs: {cfg.training.num_epochs}\n"
-            f"Batch size: {cfg.training.batch_size}\n"
-            f"Number of batches (steps): {num_batches:,}\n")
+                             f"Number of epochs: {cfg.training.num_epochs}\n"
+                             f"Batch size: {cfg.training.batch_size}\n"
+                             f"Number of batches (steps): {num_batches:,}\n")
         print(training_overview)
-        
+
         print(f'Starting training for epoch {epoch + 1}...')
         for i, batch in enumerate(dataloader):
             optimizer.zero_grad()
@@ -151,8 +148,8 @@ def main(cfg: CPUTrainingConfig):
             loss *= grad_scale.float()
             avg_step_loss = loss.sum().item()
             print(f'Epoch [{epoch+1}/{cfg.training.num_epochs}], Step [{i+1}/{num_batches}], Loss: {avg_step_loss:.4f}')
-            
-            if i+1 == cfg.training.end_early_at_step:
+
+            if i + 1 == cfg.training.end_early_at_step:
                 break_training = True
                 break
 

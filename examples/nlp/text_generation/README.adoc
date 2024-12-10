@@ -2,7 +2,7 @@
 
 The generation example apps illustrate how you can run generation with a model that's been customized for RDU on a SambaNova system. These examples are meant to show how things work and are not intended for use in production.
 
-* `cpu_generate_text.py` — Simple app for running generation on CPU to allow you to compare CPU and RDU. Tested only on Llama-2-7b.
+* `cpu_generate_text.py` — Simple app for running generation on CPU to allow you to compare CPU and RDU. Tested only on Llama-2-7b. 
 
 ** The CPU app is intended to be used as an example, it is tested only with Llama-2-7b. It is not guaranteed to work outside of the DevBox environment in typical user workflows.
 
@@ -85,6 +85,50 @@ NOTE: The CPU app is intended to be used as an example, it is tested only with L
 * At runtime, the RDU requires graph tracing to prepare for model weight tensors. `CachedInferenceCompiler::trace` is provided as convenience function for doing that. Note that `CachedInfereceCompiler::compile` calls the same `trace` function internally at compile time. It is critical that the tracing at runtime is identical to the tracing at compile for the same model.
 * At runtime, the RDU uses `samba.session.init_multigraph_runtime` to construct the runtime context to run RDU and does the actual Host to RDU weight transformation.
 * At runtime, the RDU uses the `samba.session.run` API to start RDU execution. The `generate_forward` context manager provides a convinence function on using `samba.session.run` instead of direct `model()` forward call. See `model_session.py` in the `text_generation` directory for details.
+
+== Running the RDU example app using Human-Decision (HD)
+
+You can use the RDU example app to configure certain Llama models with Human-Decision (O1HD) mapping. Provide the O1HD mapping to the RDU example app through a command-line option.
+
+The following example shows how to use O1HD with the RDU example app for Llama3 models.
+
+In this example, we use:
+
+* Batch Size: 1
+* Max Sequence Length: 4096
+* Configuration File: Use the `--config_name` option to specify the O1HD configuration file, `o1hd_config_rdu.yaml`, for the RDU example app.
+* Configuration File Location: `o1hd_config_rdu.yaml` is located in the config directory and is intended for a limited set of models.
+
+[source,bash]
+----
+
+cd /opt/modelzoo/examples/nlp/text_generation/
+
+python rdu_generate_text.py \
+  command=compile \
+  checkpoint.model_name_or_path=PATH_TO_DOWNLOADED_MODEL \
+  samba_compile.output_folder=PATH_TO_OUTPUT \
+  model.max_seq_length=4096 \
+  generation.batch_size=1 \
+  --config-name o1hd_config_rdu.yaml
+----
+
+=== Supported models for use with O1HD
+   
+Currently the support exists only for the following models and configurations:
+
+* Llama3 8B: 
+    ** `max_seq_length = 4096` 
+    ** `max_seq_length = 8192`
+    ** `batch_size` : `1, 4, 8, 16`
+
+* Llama3 70B: 
+    ** `max_seq_length = 4096` 
+    ** `max_seq_length = 8192`
+    ** `batch_size` : `1, 4, 8, 16`
+
+* Example app configuration: Specified in `config/o1hd_config_rdu.yaml`. 
+    ** Modifications to the provided YAML configuration are not supported for O1HD.
 
 == See Also
 

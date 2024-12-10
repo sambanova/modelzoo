@@ -1,4 +1,4 @@
-# Copyright 2024 SambaNova Systems, Inc.
+# Copyright 2023-2024 SambaNova Systems, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,7 +37,4 @@ class SNMistralConfig(MistralConfig, SNPretrainedConfig):
 
         Args:
         """
-        (sn_base_args, hf_base_args) = SNPretrainedConfig.split_args(kwargs)
-
-        SNPretrainedConfig.__init__(self, **sn_base_args)
-        MistralConfig.__init__(self, **hf_base_args)
+        SNPretrainedConfig.init_superclasses(subclass_self=self, kwargs_dict=kwargs)

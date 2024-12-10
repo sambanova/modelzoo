@@ -17,7 +17,6 @@ from typing import Dict, Type
 from sambanova_modelzoo.libs.nlp.core.clm_runtime import CachedInferenceRuntime
 from sambanova_modelzoo.models.config import SNPretrainedConfig
 from sambanova_modelzoo.models.configuration_transformer import ConfigurationTransformerPlugin
-from sambanova_modelzoo.models.configuration_validator import SNConfigValidatorPlugin
 from sambanova_modelzoo.models.llama.configuration_llama import SNLlamaConfig
 from sambanova_modelzoo.models.llama.modeling_llama import SNLlamaForCausalLM, SNLlamaModel
 from sambanova_modelzoo.models.model_loader import ModelLoaderPlugin
@@ -39,11 +38,6 @@ class LlamaConfigurationTransformer(ConfigurationTransformerPlugin):
             LlamaForCausalLM: SNLlamaForCausalLM,
             LlamaModel: SNLlamaModel,
         }
-
-
-class LlamaConfigValidator(SNConfigValidatorPlugin):
-    def get_config_type(self) -> Type[SNPretrainedConfig]:
-        return SNLlamaConfig
 
 
 class LlamaModelLoaderPlugin(ModelLoaderPlugin):

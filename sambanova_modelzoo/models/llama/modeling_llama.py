@@ -52,16 +52,13 @@ from .configuration_llama import SNLlamaConfig
 from sambanova_modelzoo.libs.nlp.core.clm_runtime import CausalLMGenerationMixin
 from sambanova_modelzoo.models.modeling_patch_utils import sn_patch_lazy_init_weights
 from sambanova_modelzoo.models.utils import is_jit
-from .patch_llama import (sn_llama_attention_forward,
-                          sn_llama_rms_norm_forward,
-                          sn_llama_rotary_embedding_forward,
-                          sn_llama_model_forward,
-                          sn_llama_for_causal_lm_forward,
-                          sn_llama_decoder_layer_forward,
-                          sn_patch_llama_rotary_embedding_init_cos_sin_cache,
-                          sn_patch_llama_rotary_embedding_set_cos_sin_cache,
-                          sn_patch_llama_model_add_hyperfunction_annotation,
-                          sn_patch_llama_for_causal_lm_add_hyperfunction_annotation,
+from .patch_llama import (LlamaAttentionNamespace,
+                          LlamaDecoderLayerNamespace,
+                          SNLlamaModelNamespace,
+                          SNLlamaForCausalLMNamespace,
+                          LlamaRMSNormNamespace,
+                          LlamaRotaryEmbeddingNamespace,
+                          LlamaMLPNamespace,
                           )
 from sambanova_modelzoo.models.patch_router import sn_patch_replace, sn_patch_not_supported, sn_patch_post_process_self
 
@@ -82,7 +79,7 @@ class LlamaRMSNorm(nn.Module):
         # [SambaNova] When True will make hidden states fp32 before variance computation, else use bfloat16
         self.fp32_ln = fp32_ln
 
-    @sn_patch_replace(patch=sn_llama_rms_norm_forward)
+    @sn_patch_replace(patch=LlamaRMSNormNamespace.patch_forward)
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
@@ -95,7 +92,7 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
-    @sn_patch_post_process_self(modification=sn_patch_llama_rotary_embedding_init_cos_sin_cache,
+    @sn_patch_post_process_self(modification=LlamaRotaryEmbeddingNamespace.init_cos_sin_cache,
                                 description="Initialize cos_cached and sin_cached.")
     def __init__(
         self,
@@ -163,7 +160,7 @@ class LlamaRotaryEmbedding(nn.Module):
         """ [SambaNova] Added polymorphic method to set appropriate variant of _cos_cached and _sin_cached depending on
                         rotary embedding type
         """
-        sn_patch_llama_rotary_embedding_set_cos_sin_cache(self, seq_len, device, dtype)
+        LlamaRotaryEmbeddingNamespace.set_cos_sin_cache(self, seq_len, device, dtype)
 
     @property
     def sin_cached(self):
@@ -186,7 +183,7 @@ class LlamaRotaryEmbedding(nn.Module):
         return self._cos_cached
 
     @torch.no_grad()
-    @sn_patch_replace(patch=sn_llama_rotary_embedding_forward)
+    @sn_patch_replace(patch=LlamaRotaryEmbeddingNamespace.patch_forward)
     def forward(self, x, position_ids, # [SambaNova] Added argument
                 seq_len=None):
         if "dynamic" in self.rope_type:
@@ -285,6 +282,10 @@ class LlamaMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
+    @sn_patch_replace(
+        patch=LlamaMLPNamespace.patch_forward,
+        description="To annotate OpFusion ID."
+    )
     def forward(self, x):
         if self.config.pretraining_tp > 1:
             slice = self.intermediate_size // self.config.pretraining_tp
@@ -359,7 +360,7 @@ class LlamaAttention(nn.Module):
         # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
 
-    @sn_patch_replace(patch=sn_llama_attention_forward)
+    @sn_patch_replace(patch=LlamaAttentionNamespace.patch_forward)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -703,7 +704,7 @@ class LlamaDecoderLayer(nn.Module):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, fp32_ln=fp32_ln)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, fp32_ln=fp32_ln)
 
-    @sn_patch_replace(patch=sn_llama_decoder_layer_forward)
+    @sn_patch_replace(patch=LlamaDecoderLayerNamespace.patch_forward)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -913,7 +914,7 @@ class SNLlamaModel(LlamaPreTrainedModel):
         config: SNLlamaConfig
     """
 
-    @sn_patch_post_process_self(modification=sn_patch_llama_model_add_hyperfunction_annotation,
+    @sn_patch_post_process_self(modification=lambda self, config: SNLlamaModelNamespace.add_hyperfunction_annotation(self, config, SNLlamaForCausalLM),
                                 description="Add custom SambaNova hyperfunction annotation for Llama")
     def __init__(self, config: SNLlamaConfig):
         super().__init__(config)
@@ -939,7 +940,7 @@ class SNLlamaModel(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @sn_patch_replace(patch=sn_llama_model_forward)
+    @sn_patch_replace(patch=SNLlamaModelNamespace.patch_forward)
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1149,7 +1150,7 @@ class SNLlamaModel(LlamaPreTrainedModel):
 class SNLlamaForCausalLM(LlamaPreTrainedModel, CausalLMGenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    @sn_patch_post_process_self(modification=sn_patch_llama_for_causal_lm_add_hyperfunction_annotation,
+    @sn_patch_post_process_self(modification=lambda self, config: SNLlamaForCausalLMNamespace.add_hyperfunction_annotation(self, config, SNLlamaForCausalLM),
                                 description="Add custom SambaNova hyperfunction annotation for Llama")
     def __init__(self, config: SNLlamaConfig):
         super().__init__(config)
@@ -1178,7 +1179,7 @@ class SNLlamaForCausalLM(LlamaPreTrainedModel, CausalLMGenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @sn_patch_replace(patch=sn_llama_for_causal_lm_forward)
+    @sn_patch_replace(patch=SNLlamaForCausalLMNamespace.patch_forward)
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

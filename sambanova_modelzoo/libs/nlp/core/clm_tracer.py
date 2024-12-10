@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, Final, List, Optional, Tuple, Type
 
 import torch
 from transformers import PretrainedConfig
@@ -21,7 +21,10 @@ from sambaflow import samba
 from sambaflow.samba import SambaTensor
 
 from .clm_runtime import SambaGenerationInputNames, SambaPretrainInputNames
+from .dynamic_shapes import get_dynamic_shapes
 from .generation.sampling import SamplingMethod, kMAX_K_VALUE
+
+kMAX_STREAMING_TOKENS: Final[int] = 20
 
 
 class CachedInferenceTracer:
@@ -46,6 +49,7 @@ class CachedInferenceTracer:
         self._cache_gen_input_ids: Dict[int, SambaTensor] = {}
         self._token_gen_input_ids: SambaTensor = None
         self._generated_tokens: SambaTensor = None
+        self._generated_tokens_streaming: SambaTensor = None
         self._generated_index: SambaTensor = None
         self._temperature: SambaTensor = None
         self._top_k: SambaTensor = None
@@ -53,6 +57,8 @@ class CachedInferenceTracer:
         self._pre_generated_randoms: SambaTensor = None
         self._repetition_penalty: SambaTensor = None
         self._token_count: SambaTensor = None
+
+        self.dynamic_dims = get_dynamic_shapes()
 
     def __init_subclass__(cls, model: Type[torch.nn.Module] = None, **kwargs):
         """ Register the subclasses """
@@ -86,7 +92,13 @@ class CachedInferenceTracer:
         if static_seq_length in self._cache_gen_input_ids:
             return self._cache_gen_input_ids[static_seq_length]
         input_ids = torch.randint(0, 5000, (self.batch_size, static_seq_length)).int()
-        input_ids = samba.from_torch_tensor(input_ids, name=self.input_names.cache_gen_input_ids(static_seq_length))
+        input_ids = samba.from_torch_tensor(input_ids,
+                                            name=self.input_names.cache_gen_input_ids(static_seq_length),
+                                            sized_dims=[
+                                                self.dynamic_dims.batch_size,
+                                                self.dynamic_dims.sequence_length_cache_gen.get(
+                                                    static_seq_length, None)
+                                            ])
         self._cache_gen_input_ids[static_seq_length] = input_ids
         return input_ids
 
@@ -98,19 +110,30 @@ class CachedInferenceTracer:
             return self._token_gen_input_ids
         input_ids = torch.randint(0, 5000, (self.batch_size, self.token_gen_seq_length)).int()
         input_ids = samba.from_torch_tensor(input_ids,
-                                            name=self.input_names.token_gen_input_ids(self.config.max_seq_length))
+                                            name=self.input_names.token_gen_input_ids(self.config.max_seq_length),
+                                            sized_dims=[self.dynamic_dims.batch_size, None])
         self._token_gen_input_ids = input_ids
         return input_ids
 
     def get_attention_mask(self) -> SambaTensor:
         """
-        Returns the dummy attention mask of shape (batch_size, max_seq_length) for token_gen graph and postprocessing graph.
+        When token_gen_seq_length is 1, returns the dummy attention mask of shape (batch_size, max_seq_length) for the token_gen graph and postprocessing graph.
+        When token_gen_seq_length is not 1 (i.e. during speculative decoding), returns the dummy attention mask of shape (batch_size, 1, token_gen_seq_length, max_seq_length) because the attention mask cannot be naively expanded into a 4d mask and needs to be prepared specially beforehand.
         """
         if self._attention_mask is not None:
             return self._attention_mask
 
-        attention_mask = torch.randint(2, (self.batch_size, self.config.max_seq_length), dtype=torch.int)
-        attention_mask = samba.from_torch_tensor(attention_mask, name=self.input_names.attention_mask)
+        if self.token_gen_seq_length == 1:
+            attention_mask = torch.randint(2, (self.batch_size, self.config.max_seq_length), dtype=torch.int)
+            attention_mask = samba.from_torch_tensor(
+                attention_mask,
+                name=self.input_names.attention_mask,
+                sized_dims=[self.dynamic_dims.batch_size, self.dynamic_dims.sequence_length_token_gen])
+        else:
+            attention_mask = torch.randint(2,
+                                           (self.batch_size, 1, self.token_gen_seq_length, self.config.max_seq_length),
+                                           dtype=torch.float32)
+            attention_mask = samba.from_torch_tensor(attention_mask, name=self.input_names.attention_mask)
         self._attention_mask = attention_mask
         return attention_mask
 
@@ -121,7 +144,9 @@ class CachedInferenceTracer:
         if self._logits is not None:
             return self._logits
         logits = torch.rand([self.batch_size, self.token_gen_seq_length, self.config.vocab_size], dtype=torch.float)
-        logits = samba.from_torch_tensor(logits, name=self.input_names.logits)
+        logits = samba.from_torch_tensor(logits,
+                                         name=self.input_names.logits,
+                                         sized_dims=[self.dynamic_dims.batch_size, None, None])
         self._logits = logits
         return logits
 
@@ -138,9 +163,24 @@ class CachedInferenceTracer:
             return self._generated_tokens
         max_seq_length = self.config.max_tokens_to_generate or self.config.max_seq_length
         generated_tokens = torch.randint(0, 5000, (self.batch_size, max_seq_length)).int()
-        generated_tokens = samba.from_torch_tensor(generated_tokens, name=self.input_names.generated_tokens)
+        generated_tokens = samba.from_torch_tensor(
+            generated_tokens,
+            name=self.input_names.generated_tokens,
+            sized_dims=[self.dynamic_dims.batch_size, self.dynamic_dims.sequence_length_token_gen])
         self._generated_tokens = generated_tokens
         return generated_tokens
+
+    def get_generated_tokens_streaming(self) -> SambaTensor:
+        """
+        Returns the generated_tokens_streaming to be updated and used as cache to hold the first few tokens.
+        """
+        if self._generated_tokens_streaming is not None:
+            return self._generated_tokens_streaming
+        generated_tokens_streaming = torch.zeros((self.batch_size, kMAX_STREAMING_TOKENS), dtype=torch.int32)
+        generated_tokens_streaming = samba.from_torch_tensor(generated_tokens_streaming,
+                                                             name=self.input_names.generated_tokens_streaming)
+        self._generated_tokens_streaming = generated_tokens_streaming
+        return generated_tokens_streaming
 
     def get_generated_index(self) -> SambaTensor:
         """
@@ -151,7 +191,9 @@ class CachedInferenceTracer:
         if self._generated_index is not None:
             return self._generated_index
         generated_index = torch.zeros(self.batch_size, 1, dtype=torch.int32)
-        generated_index = samba.from_torch_tensor(generated_index, name=self.input_names.generated_index)
+        generated_index = samba.from_torch_tensor(generated_index,
+                                                  name=self.input_names.generated_index,
+                                                  sized_dims=[self.dynamic_dims.batch_size, None])
         self._generated_index = generated_index
         return generated_index
 
@@ -165,7 +207,10 @@ class CachedInferenceTracer:
         """
         if self._temperature is not None:
             return self._temperature
-        temperature = samba.rand([self.batch_size, 1], dtype=torch.float, name=self.input_names.temperature)
+        temperature = samba.rand([self.batch_size, 1],
+                                 dtype=torch.float,
+                                 name=self.input_names.temperature,
+                                 sized_dims=[self.dynamic_dims.batch_size, None])
         self._temperature = temperature
         return temperature
 
@@ -178,7 +223,9 @@ class CachedInferenceTracer:
         if self._top_k is not None:
             return self._top_k
         top_k = torch.ones([self.batch_size, 1], dtype=torch.int32) * kMAX_K_VALUE
-        top_k = samba.from_torch_tensor(top_k, name=self.input_names.top_k)
+        top_k = samba.from_torch_tensor(top_k,
+                                        name=self.input_names.top_k,
+                                        sized_dims=[self.dynamic_dims.batch_size, None])
         self._top_k = top_k
         return top_k
 
@@ -192,7 +239,9 @@ class CachedInferenceTracer:
         if self._top_p is not None:
             return self._top_p
         top_p = torch.ones([self.batch_size, 1], dtype=torch.float)
-        top_p = samba.from_torch_tensor(top_p, name=self.input_names.top_p)
+        top_p = samba.from_torch_tensor(top_p,
+                                        name=self.input_names.top_p,
+                                        sized_dims=[self.dynamic_dims.batch_size, None])
         self._top_p = top_p
         return top_p
 
@@ -206,8 +255,10 @@ class CachedInferenceTracer:
         if self._pre_generated_randoms is not None:
             return self._pre_generated_randoms
         pre_generated_randoms = torch.rand((self.batch_size, self.config.max_seq_length), dtype=torch.float32)
-        pre_generated_randoms = samba.from_torch_tensor(pre_generated_randoms,
-                                                        name=self.input_names.pre_generated_randoms)
+        pre_generated_randoms = samba.from_torch_tensor(
+            pre_generated_randoms,
+            name=self.input_names.pre_generated_randoms,
+            sized_dims=[self.dynamic_dims.batch_size, self.dynamic_dims.sequence_length_token_gen])
         self._pre_generated_randoms = pre_generated_randoms
         return pre_generated_randoms
 
@@ -248,9 +299,8 @@ class CachedInferenceTracer:
             'last_token_index': self.get_last_token_index(),
             'attention_mask': self.get_attention_mask(),
             'generated_tokens': self.get_generated_tokens(),
+            'generated_tokens_streaming': self.get_generated_tokens_streaming(),
             'generated_index': self.get_generated_index(),
-            'repetition_penalty': self.get_repetition_penalty(),
-            'token_count': self.get_token_count(),
         }
         if sampling_method == SamplingMethod.multinomial:
             tracing_inputs.update({
@@ -259,6 +309,14 @@ class CachedInferenceTracer:
                 'top_p': self.get_top_p(),
                 'pre_generated_randoms': self.get_pre_generated_randoms(),
             })
+        # Speculative decoding does not support repetition penalty
+        if self.token_gen_seq_length == 1:
+            tracing_inputs.update({
+                'repetition_penalty': self.get_repetition_penalty(),
+                'token_count': self.get_token_count(),
+            })
+        else:
+            tracing_inputs.update({'input_ids': self.get_token_gen_input_ids()})
         return tracing_inputs
 
     def get_last_token_index(self) -> SambaTensor:
@@ -275,8 +333,10 @@ class CachedInferenceTracer:
         """
         if self._last_token_index is not None:
             return self._last_token_index
-        last_indices = torch.zeros(self.batch_size, 1, dtype=torch.int32)
-        last_indices = samba.from_torch_tensor(last_indices, name=self.input_names.last_token_index)
+        last_indices = torch.zeros(self.batch_size, self.token_gen_seq_length, dtype=torch.int32)
+        last_indices = samba.from_torch_tensor(last_indices,
+                                               name=self.input_names.last_token_index,
+                                               sized_dims=[self.dynamic_dims.batch_size, None])
         self._last_token_index = last_indices
         return last_indices
 
@@ -312,6 +372,16 @@ class CachedInferenceTracer:
             'last_token_index': self.get_last_token_index(),
         }
 
+    def get_token_gen_init_tracing_inputs(self) -> Dict[str, torch.Tensor]:
+        """Returns the input tensors to the token_gen_init graph.
+        Returns:
+            Dict of inputs, with the key matching the model forward function signature"""
+        return {
+            'last_token_index': self.get_last_token_index(),
+            'attention_mask': self.get_attention_mask(),
+            'generated_index': self.get_generated_index(),
+        }
+
     def _get_kv_cache(self, outputs: Tuple[Any, ...]) -> List[Tuple[SambaTensor, SambaTensor]]:
         """ Returns the list of KV cache for all layers from the traced output """
         raise NotImplementedError
@@ -322,12 +392,34 @@ class CachedInferenceTracer:
         """
         return outputs[0]
 
-    def get_last_hidden_states_output(self, outputs: Tuple[SambaTensor, ...]) -> SambaTensor:
+    def get_last_hidden_states_output(self,
+                                      *,
+                                      cache_gen_outputs: Optional[Tuple[SambaTensor, ...]] = None,
+                                      token_gen_outputs: Optional[Tuple[SambaTensor, ...]] = None) -> SambaTensor:
         """
-        Returns the last hidden states output (before normalization) from all model outputs.
-        By default, returns the last tensor.
+        Returns the last hidden states output (before normalization) from all model outputs. Exactly one of
+        :attr:`cache_gen_outputs` and :attr:`token_gen_outputs` should be specified because the position of
+        ``last_hidden_states`` differs between the cache_gen graphs and the token_gen graph.
         """
-        return outputs[-1]
+        if not ((cache_gen_outputs is None) ^ (token_gen_outputs is None)):
+            raise ValueError("Expected only one argument to be non-None")
+
+        if cache_gen_outputs:
+            return cache_gen_outputs[-2]
+        else:
+            return token_gen_outputs[-1]
+
+    def get_attention_mask_token_gen_init_output(self, outputs: Tuple[SambaTensor, ...]) -> SambaTensor:
+        """
+        Returns the attention_mask output from token_gen_init graph outputs. By default, returns the first tensor.
+        """
+        return outputs[0]
+
+    def get_generated_index_token_gen_init_output(self, outputs: Tuple[SambaTensor, ...]) -> SambaTensor:
+        """
+        Returns the generated_index output from token_gen_init graph outputs. By default, returns the second tensor.
+        """
+        return outputs[1]
 
     def _get_num_hidden_layers(self):
         return self.config.num_hidden_layers
@@ -354,14 +446,17 @@ class CachedInferenceTracer:
                                postprocess_outputs: Optional[List[torch.Tensor]] = None,
                                model_with_postprocess_init_outputs: Optional[List[torch.Tensor]] = None
                                ) -> torch.Tensor:
-        """Returns the token_count output from the cache_gen graph's outputs."""
-        msg = "expect only one argument to be non-None"
-        assert (postprocess_outputs is None) ^ (model_with_postprocess_init_outputs is None), msg
+        """Returns the token_count output from the cache_gen graph's outputs. Exactly one of
+        :attr:`postprocess_outputs` and :attr:`model_with_postprocess_init_outputs` should be specified because the position of
+        ``token_count`` differs between the cache_gen graphs and the postprocess graphs."""
+        if not ((postprocess_outputs is None) ^ (model_with_postprocess_init_outputs is None)):
+            raise ValueError("Expected only one argument to be non-None")
 
         if postprocess_outputs:
             return postprocess_outputs[5]
         else:
             return model_with_postprocess_init_outputs[-1]
+
 
 class PretrainTracer:
     model_to_tracer: Dict[Type[torch.nn.Module], Type['PretrainTracer']] = {}
@@ -377,6 +472,8 @@ class PretrainTracer:
         self.config = config
         self.batch_size = batch_size
         self.samba_name = SambaPretrainInputNames()
+
+        self.dynamic_dims = get_dynamic_shapes()
 
     @classmethod
     def get_registered_tracer(cls, model_type: Type[torch.nn.Module]) -> "PretrainTracer":
@@ -398,7 +495,10 @@ class PretrainTracer:
             The dummy input token ids if input_ids is not provided, otherwise converts input_ids to SambaTensor
         """
         input_ids = torch.randint(0, 5000, (self.batch_size, self.config.max_seq_length)).int()
-        input_ids = samba.from_torch_tensor(input_ids, name=self.samba_name.input_ids)
+        input_ids = samba.from_torch_tensor(
+            input_ids,
+            name=self.samba_name.input_ids,
+            sized_dims=[self.dynamic_dims.batch_size, self.dynamic_dims.sequence_length_token_gen])
         return input_ids
 
     def get_article_attention_mask(self) -> Tuple[SambaTensor, SambaTensor]:
@@ -413,9 +513,18 @@ class PretrainTracer:
         name_pair = self.samba_name.attention_mask
         # For training we always provides a pair of vector to generate on-chip 3D attention mask
         attention_mask_collapsed_1 = torch.ones((self.batch_size, 1, 1, self.config.max_seq_length))
-        attention_mask_collapsed_1 = samba.from_torch_tensor(attention_mask_collapsed_1, batch_dim=0, name=name_pair[0])
+        attention_mask_collapsed_1 = samba.from_torch_tensor(
+            attention_mask_collapsed_1,
+            batch_dim=0,
+            name=name_pair[0],
+            sized_dims=[self.dynamic_dims.batch_size, None, None, self.dynamic_dims.sequence_length_token_gen])
         attention_mask_collapsed_2 = torch.ones((self.batch_size, 1, self.config.max_seq_length, 1))
-        attention_mask_collapsed_2 = samba.from_torch_tensor(attention_mask_collapsed_2, batch_dim=0, name=name_pair[1])
+        attention_mask_collapsed_2 = samba.from_torch_tensor(
+            attention_mask_collapsed_2,
+            batch_dim=0,
+            name=name_pair[1],
+            sized_dims=[self.dynamic_dims.batch_size, None, self.dynamic_dims.sequence_length_token_gen, None])
+
         return attention_mask_collapsed_1, attention_mask_collapsed_2
 
     def get_labels(self) -> SambaTensor:
@@ -424,7 +533,10 @@ class PretrainTracer:
             The label tensor for training.
         """
         labels = torch.ones(self.batch_size, self.config.max_seq_length, dtype=torch.int32)
-        return samba.from_torch_tensor(labels, name=self.samba_name.labels)
+        return samba.from_torch_tensor(
+            labels,
+            name=self.samba_name.labels,
+            sized_dims=[self.dynamic_dims.batch_size, self.dynamic_dims.sequence_length_token_gen])
 
     def get_tracing_inputs(self) -> Dict[str, SambaTensor]:
         """

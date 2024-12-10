@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
 import functools
 import os
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ class PytorchGenerationInputNames(Enum):
     logits = 'logits'
     last_hidden_states = 'last_hidden_states'
     generated_tokens = 'generated_tokens'
+    generated_tokens_streaming = 'generated_tokens_streaming'
     generated_index = 'generated_index'
     temperature = 'temperature'
     top_k = 'top_k'
@@ -123,6 +125,14 @@ class SambaGenerationInputNames:
         return PytorchGenerationInputNames.generated_tokens.value
 
     @property
+    def generated_tokens_streaming(self) -> str:
+        """
+        Returns the generated_tokens_streaming input and output name for the postprocessing graph. It will be updated in-place
+        to hold the first few generated tokens.
+        """
+        return PytorchGenerationInputNames.generated_tokens_streaming.value
+
+    @property
     def generated_index(self) -> str:
         """ Returns the generated_index tensor name. generated_index is used for generated_tokens update """
         return PytorchGenerationInputNames.generated_index.value
@@ -167,7 +177,8 @@ class SambaPretrainInputNames:
         return getattr(self, item)
 
 
-class SambaGraphNames:
+class InferenceSambaGraphNames:
+    """The names of the graphs used in inference. Includes the cache_gen graphs."""
     @staticmethod
     @functools.lru_cache
     def cache_gen(static_sequence_length: int) -> str:
@@ -180,6 +191,10 @@ class SambaGraphNames:
         """
         return 'model_nocache_' + str(static_sequence_length) + '_fwd'
 
+
+class CachedInferenceSambaGraphNames(InferenceSambaGraphNames):
+    """The names of the graphs used in cached inference. Includes the cache_gen, token_gen, postprocess, and lm_head
+    graphs."""
     @staticmethod
     @functools.lru_cache
     def token_gen(max_seq_length: int) -> str:
@@ -215,6 +230,14 @@ class SambaGraphNames:
             Name of lm_head graph.
         """
         return 'lm_head'
+
+    @staticmethod
+    def token_gen_init() -> str:
+        """
+        Returns:
+            Name of token_gen_init graph.
+        """
+        return 'token_gen_init'
 
 
 def expensive_error_if(error_type: Type[Exception], msg: str, condition: Callable[..., bool], *args, **kwargs):
@@ -253,18 +276,16 @@ def counted(f: Callable[..., Any]):
     return wrapped
 
 
-class CachedInferenceRuntime:
-    model_to_runtime: Dict[Type[torch.nn.Module], Type['CachedInferenceRuntime']] = {}
-
+class BaseInferenceRuntime(abc.ABC):
     def __init__(self,
                  max_seq_length: int,
                  pad_token_id: int,
                  sliding_window: Optional[int] = None,
                  runner: str = 'pytorch'):
         """
-        Base class for preprocessing inputs to run cached inference. The class is stateful in the sense that first
-        preprocess_inputs is called for cache generation and then many token generation calls follow.
-        preprocess_inputs can only be called (max_seq_length - min_prompt_len) times.
+        Base class for preprocessing inputs to run inference. The class is stateful in the sense that first
+        :meth:`preprocess_inputs` is called for cache generation and then many token generation calls follow.
+        :meth:`preprocess_inputs` can only be called (max_seq_length - min_prompt_len) times.
 
         This state machine makes the following assumptions:
         1. The prompt is right padded (left aligned).
@@ -302,30 +323,6 @@ class CachedInferenceRuntime:
         # Input names
         self.input_names = SambaGenerationInputNames()
 
-        # Graph names used by Samba
-        self.graph_names = SambaGraphNames()
-
-    def __init_subclass__(cls, model: Type[torch.nn.Module] = None, **kwargs):
-        """ Register the subclasses """
-        super().__init_subclass__(**kwargs)
-        if model is None:
-            raise RuntimeError('model needs to be specified to register CachedInferenceRuntime')
-        CachedInferenceRuntime.model_to_runtime[model] = cls
-
-    @classmethod
-    def get_registered_runtime(cls, model_type: Type[torch.nn.Module]) -> 'CachedInfereceRuntime':
-        """
-        Args:
-            model_type: The class name of the SNModel to be queried for.
-        Returns:
-            The registered class of the correponding ModelRuntime.
-        """
-        if model_type not in cls.model_to_runtime:
-            raise ValueError(
-                f"{model_type} is not registered with CachedInferenceRuntime. Registered are {cls.model_to_runtime.keys()}"
-            )
-        return cls.model_to_runtime[model_type]
-
     @property
     def runner(self) -> str:
         """
@@ -351,17 +348,14 @@ class CachedInferenceRuntime:
         return self._prompt_tokens
 
     @prompt_tokens.setter
+    @abc.abstractmethod
     def prompt_tokens(self, prompts: torch.Tensor):
         """
         Sets the input prompts. You can only do it once, otherwise a RuntimeError will be raised.
         """
-        if self.prompt_tokens is None:
-            if prompts.shape[1] >= self.max_seq_length:
-                raise ValueError("Prompts should be shorter than the compiled seq length")
-            self._prompt_tokens = prompts
-        else:
-            raise RuntimeError(f"prompt_tokens has can only be set once, existed: {self.prompt_tokens}: new: {prompts}")
+        raise NotImplementedError()
 
+    @abc.abstractmethod
     def graph_to_call(self, cache_gen: bool, static_seq_length: int) -> str:
         """
         Args:
@@ -373,22 +367,14 @@ class CachedInferenceRuntime:
             PEF as the call schedule ID. At runtime, the name call be used to run a specific part of the PEF (call schedule),
             as either cache_gen or token_gen.
         """
-        if cache_gen:
-            return self.graph_names.cache_gen(static_seq_length)
-        else:
-            return self.graph_names.token_gen(self.max_seq_length)
+        raise NotImplementedError()
 
+    @abc.abstractmethod
     def input_ids_name(self, token_gen: Optional[bool] = None, static_seq_length: Optional[int] = None) -> str:
         """
-        Returns tensor name of iput_ids.
+        Returns tensor name of input_ids.
         """
-        if self.runner == 'pytorch':
-            return PytorchGenerationInputNames.input_ids.value
-        else:
-            if token_gen:
-                return self.input_names.token_gen_input_ids(self.max_seq_length)
-            else:
-                return self.input_names.cache_gen_input_ids(static_seq_length)
+        raise NotImplementedError()
 
     @property
     def attention_mask_name(self) -> str:
@@ -484,6 +470,199 @@ class CachedInferenceRuntime:
             self.input_ids_name(token_gen=False, static_seq_length=static_seq_length): self.input_ids,
             self.last_token_index_name: self.last_token_index
         }
+
+
+class InferenceRuntime(BaseInferenceRuntime):
+    model_to_runtime: Dict[Type[torch.nn.Module], Type['InferenceRuntime']] = {}
+
+    def __init__(self,
+                 max_seq_length: int,
+                 pad_token_id: int,
+                 sliding_window: Optional[int] = None,
+                 runner: str = 'pytorch'):
+        """
+        Class for preprocessing inputs to run model inference. The class does not call any token-gen graphs.
+
+        This state machine makes the following assumptions:
+        1. The prompt is right padded (left aligned).
+        2. There is no token-gen graph to call
+        3. The model has to take into account that the input ids is right-padded.
+
+        Args:
+            max_seq_length: The maximum sequence length of token generation graph.
+            pad_token_id: Padding token id.
+            sliding_window: Window size for sliding window attention. It's used to attend only the past `sliding_window`
+                            number of tokens.
+            runner: The runner on the processed inputs, choices are ['pytorch' (default), 'samba'].
+                    If runner is `pytorch`, the returned string key of the tensor has to match the model forward call signature.
+                    If runner is `samba`, the returned string key does not have to match the model forward signature.
+                    Instead, the string key of the tensor has to match the compile time input symobls names.
+        """
+        super().__init__(max_seq_length=max_seq_length,
+                         pad_token_id=pad_token_id,
+                         sliding_window=sliding_window,
+                         runner=runner)
+
+        # Graph names used by Samba
+        self.graph_names = InferenceSambaGraphNames()
+
+    def __init_subclass__(cls, model: Type[torch.nn.Module] = None, **kwargs):
+        """ Register the subclasses """
+        super().__init_subclass__(**kwargs)
+        if model is None:
+            raise RuntimeError('model needs to be specified to register InferenceRuntime')
+        InferenceRuntime.model_to_runtime[model] = cls
+
+    @classmethod
+    def get_registered_runtime(cls, model_type: Type[torch.nn.Module]) -> 'InferenceRuntime':
+        """
+        Args:
+            model_type: The class name of the SNModel to be queried for.
+        Returns:
+            The registered class of the correponding ModelRuntime.
+        """
+        if model_type not in cls.model_to_runtime:
+            raise ValueError(
+                f"{model_type} is not registered with InferenceRuntime. Registered are {cls.model_to_runtime.keys()}")
+        return cls.model_to_runtime[model_type]
+
+    @BaseInferenceRuntime.prompt_tokens.setter
+    def prompt_tokens(self, prompts: torch.Tensor):
+        """
+        Setting the input prompts. You can only do it once, otherwise RuntimeError will be raised.
+        """
+        if self.prompt_tokens is None:
+            # Greater than since we can pass in prompts to model for one forward call if the input SS size is max_seq_length
+            if prompts.shape[1] > self.max_seq_length:
+                raise ValueError("Prompts should be shorter than the compiled seq length")
+            self._prompt_tokens = prompts
+        else:
+            raise RuntimeError(f"prompt_tokens has can only be set once, existed: {self.prompt_tokens}: new: {prompts}")
+
+    def graph_to_call(self, cache_gen: bool, static_seq_length: int) -> str:
+        """
+        Args:
+            cache_gen: Whether to get cache generation graph name. For :class:`InferenceRuntime`, only
+                cache_gen=True is supported.
+            static_seq_length: The sequence length of the input_ids to be padded to for cache_gen graph.
+        Returns:
+            The graph schedule name to call to process the inputs. Samba compiles cache_gen graph(s) into
+            the same PEF as different schedules. This graph name is determined at compilation and written inside the
+            PEF as the call schedule ID. At runtime, the name call be used to run the specific part of the PEF (call schedule).
+        """
+        if not cache_gen:
+            raise RuntimeError("InferenceRuntime does not support continued token generation")
+        return self.graph_names.cache_gen(static_seq_length)
+
+    def input_ids_name(self, token_gen: Optional[bool] = None, static_seq_length: Optional[int] = None) -> str:
+        """
+        Returns tensor name of input_ids.
+        """
+        if self.runner == 'pytorch':
+            return PytorchGenerationInputNames.input_ids.value
+        else:
+            if token_gen:
+                return RuntimeError("InferenceRuntime does not support continued token generation")
+            return self.input_names.cache_gen_input_ids(static_seq_length)
+
+
+class CachedInferenceRuntime(BaseInferenceRuntime):
+    model_to_runtime: Dict[Type[torch.nn.Module], Type['CachedInferenceRuntime']] = {}
+
+    def __init__(self,
+                 max_seq_length: int,
+                 pad_token_id: int,
+                 sliding_window: Optional[int] = None,
+                 runner: str = 'pytorch'):
+        """
+        Class for preprocessing inputs to run cached inference. The class is stateful in the sense that the first
+        time preprocess_inputs is called for cache generation and then followed by many token generation calls.
+        preprocess_inputs can only be called (max_seq_length - min_prompt_len) times.
+
+        This state machine makes the following assumptions:
+        1. The prompt is right padded (left aligned).
+        2. The token generation phase only sends seqlen=1, that is, the last generated tokens, as input ids
+        3. The model has to take into account that the input ids is right-padded.
+
+        Args:
+            max_seq_length: The maximum sequence length of token generation graph.
+            pad_token_id: Padding token id.
+            sliding_window: Window size for sliding window attention. It's used to attend only the past `sliding_window`
+                            number of tokens.
+            runner: The runner on the processed inputs, choices are ['pytorch' (default), 'samba'].
+                    If runner is `pytorch`, the returned string key of the tensor has to match the model forward call signature.
+                    If runner is `samba`, the returned string key does not have to match the model forward signature.
+                    Instead, the string key of the tensor has to match the compile time input symobls names.
+        """
+        super().__init__(max_seq_length=max_seq_length,
+                         pad_token_id=pad_token_id,
+                         sliding_window=sliding_window,
+                         runner=runner)
+
+        # Graph names used by Samba
+        self.graph_names = CachedInferenceSambaGraphNames()
+
+    def __init_subclass__(cls, model: Type[torch.nn.Module] = None, **kwargs):
+        """ Register the subclasses """
+        super().__init_subclass__(**kwargs)
+        if model is None:
+            raise RuntimeError('model needs to be specified to register CachedInferenceRuntime')
+        CachedInferenceRuntime.model_to_runtime[model] = cls
+
+    @classmethod
+    def get_registered_runtime(cls, model_type: Type[torch.nn.Module]) -> 'CachedInferenceRuntime':
+        """
+        Args:
+            model_type: The class name of the SNModel to be queried for.
+        Returns:
+            The registered class of the correponding ModelRuntime.
+        """
+        if model_type not in cls.model_to_runtime:
+            raise ValueError(
+                f"{model_type} is not registered with CachedInferenceRuntime. Registered are {cls.model_to_runtime.keys()}"
+            )
+        return cls.model_to_runtime[model_type]
+
+    @BaseInferenceRuntime.prompt_tokens.setter
+    def prompt_tokens(self, prompts: torch.Tensor):
+        """
+        Setting the input prompts. You can only do it once, otherwise RuntimeError will be raised.
+        """
+        if self.prompt_tokens is None:
+            # Greater than since we can pass in prompts to model for one forward call if the input SS size is max_seq_length
+            if prompts.shape[1] >= self.max_seq_length:
+                raise ValueError("Prompts should be shorter than the compiled seq length")
+            self._prompt_tokens = prompts
+        else:
+            raise RuntimeError(f"prompt_tokens has can only be set once, existed: {self.prompt_tokens}: new: {prompts}")
+
+    def graph_to_call(self, cache_gen: bool, static_seq_length: int) -> str:
+        """
+        Args:
+            cache_gen: Whether to get cache generation graph name.
+            static_seq_length: The sequence length of the input_ids to be padded to for cache_gen graph.
+        Returns:
+            The graph schedule name to call to process the inputs. Samba compiles cache_gen and token_gen graph into
+            the same PEF as different schedules. This graph name is determined at compilation and written inside the
+            PEF as the call schedule ID. At runtime, the name call be used to run specific part of the PEF (call schedule),
+            as either cache_gen or token_gen.
+        """
+        if cache_gen:
+            return self.graph_names.cache_gen(static_seq_length)
+        else:
+            return self.graph_names.token_gen(self.max_seq_length)
+
+    def input_ids_name(self, token_gen: Optional[bool] = None, static_seq_length: Optional[int] = None) -> str:
+        """
+        Returns tensor name of input_ids.
+        """
+        if self.runner == 'pytorch':
+            return PytorchGenerationInputNames.input_ids.value
+        else:
+            if token_gen:
+                return self.input_names.token_gen_input_ids(self.max_seq_length)
+            else:
+                return self.input_names.cache_gen_input_ids(static_seq_length)
 
     @counted
     def preprocess_inputs_for_token_gen(self, input_ids: torch.Tensor) -> Dict[str, torch.Tensor]:

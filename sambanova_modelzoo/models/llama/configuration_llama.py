@@ -1,4 +1,4 @@
-# Copyright 2024 SambaNova Systems, Inc.
+# Copyright 2023-2024 SambaNova Systems, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +33,4 @@ class SNLlamaConfig(LlamaConfig, SNPretrainedConfig):
         If you add a parameter to the constructor, it will not be passed to the superclasses, you must handle it in this constructor.
         See superclasses for default values.
         """
-        (sn_base_args, hf_base_args) = SNPretrainedConfig.split_args(kwargs)
-
-        SNPretrainedConfig.__init__(self, **sn_base_args)
-        LlamaConfig.__init__(self, **hf_base_args)
+        SNPretrainedConfig.init_superclasses(subclass_self=self, kwargs_dict=kwargs, sn_overrides={}, hf_overrides={})

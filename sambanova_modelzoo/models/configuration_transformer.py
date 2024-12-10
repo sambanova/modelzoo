@@ -15,12 +15,21 @@
 import abc
 import logging
 from abc import abstractmethod
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Type, Union
 
-from sambanova_modelzoo.models.config import SNPretrainedConfig
+from sambanova_modelzoo.models.config import SNPretrainedConfig, apply_hf_config_overrides
 from transformers import PretrainedConfig, PreTrainedModel
 
 logger = logging.getLogger(__name__)
+
+
+class ConstructorSubConfigFieldMismatchError(Exception):
+    """This is an error that indicates that there is a mismatch between the sub-config fields in the source and
+    target config classes' constructors. This is a non-recoverable error that signifies the implementation of
+    the SambaNoba config has a constructor that does not match the sub-config fields in the PretrainedConfig
+    it is extending.
+    """
 
 
 # ====================================
@@ -55,7 +64,7 @@ class ConfigurationTransformerPlugin(abc.ABC):
             raise ValueError(f"The get_architectures_transform_map for model type '{model_type_id}' is not bijective.")
 
         from transformers import AutoConfig
-        AutoConfig.register(model_type_id, to_config)
+        AutoConfig.register(model_type_id, to_config, exist_ok=False)  # add the default exist_ok=False, explicitly
 
     @abstractmethod
     def get_source_conversion_type(self) -> Type[PretrainedConfig]:
@@ -72,28 +81,25 @@ class ConfigurationTransformerPlugin(abc.ABC):
         """
         Returns: Map of model architectures from hf to sn, e.g. MistralForCausalLM to SNMistralForCausalLM.
         """
-
     def is_match(self, source_config: Union[PretrainedConfig, SNPretrainedConfig]) -> bool:
         """
         Args:
             source_config
         Returns:
-            True if the source_config matches the plugin's source conversion type
+            True if source_config matches the plugin's source conversion type or itself (self conversion is ok)
         """
         # Make sure not to match subclasses, else two different subclasses of e.g. a config will match the same plugin
         source_type = type(source_config)
         return source_type is self.get_source_conversion_type() or source_type is self.get_target_conversion_type()
 
-    def apply(self, config: PretrainedConfig, sn_model_args: Dict[str, Any],
-              original_config_overrides: Dict[str, Any]) -> Optional[Union[PretrainedConfig, SNPretrainedConfig]]:
+    def apply(self, config: Union[PretrainedConfig, SNPretrainedConfig],
+              sn_model_args: Dict[str, Any]) -> Optional[Union[PretrainedConfig, SNPretrainedConfig]]:
         """
         Args:
-            config: the config object to transform into a new SambaNova model config.
+            config: the config object to transform into a new SambaNova model config. May be target type already
+                    self-transformation is supported.
             sn_model_args: the args we should choose from when constructing the new SNPretrainedConfig subclass object.
                            This may safely be a superset containing parameters that the specific SN config will not use.
-                           # TODO: a superset containing arguments? args?
-            original_config_overrides: any arguments that should be overridden in the original config. If provided these
-                           will override the plugin's defined original config overrides if there is a match.
 
         Returns:
             A new specific SambaNova config (that is also a PretrainedConfig as well as a SNPretrainedConfig)
@@ -108,17 +114,23 @@ class ConfigurationTransformerPlugin(abc.ABC):
                                                provided_args=sn_model_args,
                                                target_type_name=target_type.__name__)
 
-        sn_config = target_type.create(sn_args=sn_model_specific_args,
-                                       original_config=config,
-                                       original_config_overrides=original_config_overrides)
+        sn_config = target_type.create(sn_args=sn_model_specific_args, original_config=config)
 
-        if sn_config.architectures is not None:
-            architecture_map_name = {
-                hf_model_key.__name__: sn_model_value.__name__
-                for hf_model_key, sn_model_value in self.get_architectures_transform_map().items()
-            }
-            sn_config.architectures = [architecture_map_name[architecture] for architecture in sn_config.architectures]
+        if not isinstance(config, SNPretrainedConfig):
+            self._remap_architectures_inplace(sn_config)
+
         return sn_config
+
+    def _remap_architectures_inplace(self, sn_config: SNPretrainedConfig):
+        if sn_config.architectures is None:
+            return
+
+        architecture_map_name = {
+            hf_model_key.__name__: sn_model_value.__name__
+            for hf_model_key, sn_model_value in self.get_architectures_transform_map().items()
+        }
+        # TODO: when trying to convert a model with unknown architecture, it will crash... handle more properly
+        sn_config.architectures = [architecture_map_name[architecture] for architecture in sn_config.architectures]
 
     @staticmethod
     def get_registered_plugins() -> List['ConfigurationTransformerPlugin']:
@@ -128,7 +140,8 @@ class ConfigurationTransformerPlugin(abc.ABC):
             if plugin_class not in ConfigurationTransformerPlugin._registered_plugins:
                 ConfigurationTransformerPlugin._registered_plugins[plugin_class] = plugin_class()
 
-        return list(ConfigurationTransformerPlugin._registered_plugins.values())
+        plugins = list(ConfigurationTransformerPlugin._registered_plugins.values())
+        return sorted(plugins, key=lambda e: e.__class__.__name__)
 
     def _sanity_check_model_specific_args(self, specific_args: Dict[str, Any], provided_args: Dict[str, Any],
                                           target_type_name: str):
@@ -189,13 +202,56 @@ class ConfigurationTransformer:
 
         Raises:
             ValueError if not exactly 1 plugin matches
+            ConstructorSubConfigFieldMismatchError if SN config constructor does not match the HF config
+            constructor sub-config fields
         """
-        # We may want to allow multiple mappings, but in that case we need to add an explicit choice of mapping
-        sn_model_args = sn_model_args if sn_model_args is not None else {}
-        original_config_overrides = original_config_overrides if original_config_overrides is not None else {}
+        overridden_hf_config = apply_hf_config_overrides(config=config, overrides=original_config_overrides or {})
+        return self._run_nested(overridden_hf_config, sn_model_args)
 
+    def _run_nested(self, config: PretrainedConfig,
+                    sn_model_args: Optional[Dict[str, Any]] = None) -> Union[PretrainedConfig, SNPretrainedConfig]:
+
+        sn_overrides = deepcopy(sn_model_args) if sn_model_args is not None else {}
         plugin = self.get_plugin_for_source_config(config)
-        config = plugin.apply(config, sn_model_args, original_config_overrides)
+
+        # Find sub configs in the PretrainedConfig instance,
+        #  based on field names in the SNPretrainedConfig instance.
+        target_config_type = plugin.get_target_conversion_type()
+        source_config_type = config.__class__  # since we allow self-conversion
+
+        sn_sub_configs = target_config_type.get_sn_subclass_nested_config_args()
+
+        # Can't rely on __init__ signature for HF configs
+        hf_sub_configs = {name: clazz for name, clazz in vars(config).items() if isinstance(clazz, PretrainedConfig)}
+
+        # Checking types of sub-configs is tricky, since they don't strictly match... SNLlamaConfig <-> LlamaConfig
+        #  We will settle for checking field names, we could use the plugins but that is a bit convoluted.
+        #  We can allow hf to have sub_configs and SN to not have it (maybe hard coded in __init__)
+        #  but if SN has sub_configs there must be at least that many also in the HF config.
+        if set(sn_sub_configs.keys()) != set(hf_sub_configs.keys()):  # must match on sub-config fields
+            raise ConstructorSubConfigFieldMismatchError(
+                f'Expected class {target_config_type} to have matching sub-config fields '
+                f'with {source_config_type}, in the constructor. '
+                f'SN: {[f"n:{c}" for c in sn_sub_configs.keys()]}, '
+                f'HF: {[f"n:{c}" for c in hf_sub_configs.keys()]}')
+
+        collected_sub_configs = {}
+
+        # Recurse if sub-configs
+        for field, config_type in sn_sub_configs.items():
+            sub_config_to_convert = getattr(config, field)
+            sub_sn_overrides = sn_overrides.get(field, {})
+            sn_overrides.pop(field, None)
+
+            converted_config = self._run_nested(config=sub_config_to_convert, sn_model_args=sub_sn_overrides)
+            collected_sub_configs[field] = converted_config
+
+        # Base case, no sub-configs
+        #  Use the sn_model_args to set the sub-config fields.
+        #  This implies that the SN config must match the hugging face
+        #  config structure for the sub-config fields.
+        sn_model_args_with_sub_configs = {**collected_sub_configs, **sn_overrides}
+        config = plugin.apply(config, sn_model_args=sn_model_args_with_sub_configs)
         return config
 
     def get_plugins(self) -> List[ConfigurationTransformerPlugin]:
