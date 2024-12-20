@@ -39,14 +39,14 @@ The table below provides a list of models in Model Zoo and links to its correspo
 [cols="1,1", options="header"]
 |=== 
 | Model | Model Card 
-| Llama-2-7b | xref:src/sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
-| Llama-2-13b | xref:src/sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
-| Llama-2-70b | xref:src/sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
-| Llama-3-8b | xref:src/sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
-| Llama-3.1-8b | xref:src/sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
-| Llama-3.1-70b | xref:src/sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
-| Gemma-7b | xref:src/sambanova_modelzoo/models/gemma/README.adoc[Gemma Model Card]
-| Mistral-7b | xref:src/sambanova_modelzoo/models/mistral/README.adoc[Mistral Model Card]
+| Llama-2-7b | xref:sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
+| Llama-2-13b | xref:sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
+| Llama-2-70b | xref:sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
+| Llama-3-8b | xref:sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
+| Llama-3.1-8b | xref:sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
+| Llama-3.1-70b | xref:sambanova_modelzoo/models/llama/README.adoc[Llama Model Card]
+| Gemma-7b | xref:sambanova_modelzoo/models/gemma/README.adoc[Gemma Model Card]
+| Mistral-7b | xref:sambanova_modelzoo/models/mistral/README.adoc[Mistral Model Card]
 |===
 
 == Structure
